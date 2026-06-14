@@ -22,6 +22,7 @@ const classScheduleSchema = new mongoose.Schema(
       default: "scheduled",
     },
     participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    scheduleGroupId: { type: String, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

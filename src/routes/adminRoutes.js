@@ -40,6 +40,7 @@ import {
   getSchedules,
   updateSchedule,
   deleteSchedule,
+  deleteScheduleGroup,
 } from "../controllers/admin/scheduleController.js";
 import {
   getConversations,
@@ -92,6 +93,7 @@ router.delete("/batches/:id", deleteBatch);
 
 router.post("/schedules", createSchedule);
 router.get("/schedules", getSchedules);
+router.delete("/schedules/group/:groupId", deleteScheduleGroup);
 router.put("/schedules/:id", updateSchedule);
 router.delete("/schedules/:id", deleteSchedule);
 
