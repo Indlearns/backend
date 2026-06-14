@@ -11,7 +11,8 @@ import {
   assertTutorAssignment,
   assertTutorSchedule,
 } from "../../utils/tutorAccess.js";
-import { createJitsiRoomName, buildJitsiUrl, getJitsiDomain } from "../../utils/jitsiRoom.js";
+import { createVideoRoomId, ensureVideoRoomId } from "../../utils/videoRoom.js";
+import { getIceServers } from "../../config/iceConfig.js";
 import { ROLES } from "../../config/roleConfig.js";
 
 export const getDashboard = async (req, res) => {
@@ -68,19 +69,10 @@ export const getMyClasses = async (req, res) => {
       .sort({ date: 1, startTime: 1 });
 
     for (const s of schedules) {
-      if (!s.jitsiRoomName) {
-        s.jitsiRoomName = createJitsiRoomName("class", s._id);
-        await s.save();
-      }
+      await ensureVideoRoomId(s, "class", "_id");
     }
 
-    const data = schedules.map((s) => ({
-      ...s.toObject(),
-      jitsiUrl: buildJitsiUrl(s.jitsiRoomName, req.user.name),
-      jitsiDomain: getJitsiDomain(),
-    }));
-
-    res.json({ success: true, count: data.length, data });
+    res.json({ success: true, count: schedules.length, data: schedules });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -89,10 +81,7 @@ export const getMyClasses = async (req, res) => {
 export const joinClass = async (req, res) => {
   try {
     const schedule = await assertTutorSchedule(req.user._id, req.params.id);
-    if (!schedule.jitsiRoomName) {
-      schedule.jitsiRoomName = createJitsiRoomName("class", schedule._id);
-      await schedule.save();
-    }
+    const roomId = await ensureVideoRoomId(schedule, "class", "_id");
     if (schedule.status === "scheduled") {
       schedule.status = "live";
       await schedule.save();
@@ -101,9 +90,9 @@ export const joinClass = async (req, res) => {
       success: true,
       data: {
         schedule,
-        domain: getJitsiDomain(),
-        roomName: schedule.jitsiRoomName,
-        url: buildJitsiUrl(schedule.jitsiRoomName, req.user.name),
+        roomId,
+        roomName: roomId,
+        iceServers: getIceServers(),
       },
     });
   } catch (error) {
@@ -309,7 +298,7 @@ export const respondMeetingRequest = async (req, res) => {
         type: "doubt",
         batch: request.batch,
         participants: pair,
-        jitsiRoomName: createJitsiRoomName("doubt", key),
+        videoRoomId: createVideoRoomId("doubt", key),
         createdBy: req.user._id,
       });
     }
@@ -328,7 +317,7 @@ export const respondMeetingRequest = async (req, res) => {
       success: true,
       data: populated,
       conversationId: conv._id,
-      videoRoom: conv.jitsiRoomName,
+      videoRoom: conv.videoRoomId || conv.jitsiRoomName,
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });

@@ -2,7 +2,7 @@ import Batch from "../../models/Batch.js";
 import Conversation from "../../models/Conversation.js";
 import User from "../../models/User.js";
 import { ROLES } from "../../config/roleConfig.js";
-import { createJitsiRoomName } from "../../utils/jitsiRoom.js";
+import { createVideoRoomId } from "../../utils/videoRoom.js";
 import { syncBatchEnrollment } from "../../utils/syncEnrollment.js";
 
 export const createBatch = async (req, res) => {
@@ -46,7 +46,7 @@ export const createBatch = async (req, res) => {
       type: "batch",
       batch: batch._id,
       participants: uniqueParticipants,
-      jitsiRoomName: createJitsiRoomName("batch", batch._id),
+      videoRoomId: createVideoRoomId("batch", batch._id),
       createdBy: req.user._id,
     });
 
@@ -109,8 +109,8 @@ export const updateBatch = async (req, res) => {
         ...(batch.students || []),
       ];
       conv.participants = [...new Map(ids.map((id) => [String(id), id])).values()];
-      if (!conv.jitsiRoomName) {
-        conv.jitsiRoomName = createJitsiRoomName("batch", batch._id);
+      if (!conv.videoRoomId && !conv.jitsiRoomName) {
+        conv.videoRoomId = createVideoRoomId("batch", batch._id);
       }
       await conv.save();
     }

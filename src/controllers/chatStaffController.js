@@ -2,7 +2,7 @@ import Batch from "../models/Batch.js";
 import Conversation from "../models/Conversation.js";
 import User from "../models/User.js";
 import { ROLES } from "../config/roleConfig.js";
-import { createJitsiRoomName } from "../utils/jitsiRoom.js";
+import { createVideoRoomId } from "../utils/videoRoom.js";
 import { validateDoubtPair } from "../utils/chatPermissions.js";
 
 const STAFF = [ROLES.SUPERADMIN, ROLES.ADMIN];
@@ -94,7 +94,7 @@ export const openBatchConversation = async (req, res) => {
         type: "batch",
         batch: batch._id,
         participants: uniqueParticipants,
-        jitsiRoomName: createJitsiRoomName("batch", batch._id),
+        videoRoomId: createVideoRoomId("batch", batch._id),
         createdBy: req.user._id,
       });
     } else {
@@ -111,8 +111,8 @@ export const openBatchConversation = async (req, res) => {
           conv.participants.push(id);
         }
       });
-      if (!conv.jitsiRoomName) {
-        conv.jitsiRoomName = createJitsiRoomName("batch", batch._id);
+      if (!conv.videoRoomId && !conv.jitsiRoomName) {
+        conv.videoRoomId = createVideoRoomId("batch", batch._id);
       }
       await conv.save();
     }
@@ -170,7 +170,7 @@ export const startGroupChat = async (req, res) => {
         title: autoTitle,
         type: "group",
         participants: uniqueIds,
-        jitsiRoomName: createJitsiRoomName("group", uniqueIds.sort().join("_")),
+        videoRoomId: createVideoRoomId("group", uniqueIds.sort().join("_")),
         createdBy: req.user._id,
       });
     } else if (title?.trim()) {

@@ -11,6 +11,7 @@ const conversationSchema = new mongoose.Schema(
     batch: { type: mongoose.Schema.Types.ObjectId, ref: "Batch" },
     schedule: { type: mongoose.Schema.Types.ObjectId, ref: "ClassSchedule" },
     participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    videoRoomId: { type: String, default: "" },
     jitsiRoomName: { type: String, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     lastMessageAt: { type: Date, default: Date.now },

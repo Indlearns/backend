@@ -1,6 +1,6 @@
 import ClassSchedule from "../../models/ClassSchedule.js";
 import Batch from "../../models/Batch.js";
-import { createJitsiRoomName } from "../../utils/jitsiRoom.js";
+import { createVideoRoomId } from "../../utils/videoRoom.js";
 
 export const createSchedule = async (req, res) => {
   try {
@@ -19,7 +19,7 @@ export const createSchedule = async (req, res) => {
       meetLink,
       tutor: tutor || batchDoc.tutor,
       notes,
-      jitsiRoomName: createJitsiRoomName("class", `${batch}_${date}_${startTime}`),
+      videoRoomId: createVideoRoomId("class", `${batch}_${date}_${startTime}`),
       createdBy: req.user._id,
     });
 

@@ -5,7 +5,8 @@ import ClassSchedule from "../models/ClassSchedule.js";
 import User from "../models/User.js";
 import { ROLES } from "../config/roleConfig.js";
 import { validateDoubtPair, getAllowedContactsQuery } from "../utils/chatPermissions.js";
-import { createJitsiRoomName, buildJitsiUrl, getJitsiDomain } from "../utils/jitsiRoom.js";
+import { createVideoRoomId, ensureVideoRoomId } from "../utils/videoRoom.js";
+import { getIceServers } from "../config/iceConfig.js";
 
 const populateConv = (q) =>
   q.populate("batch", "name").populate("participants", "name email role");
@@ -58,7 +59,7 @@ export const startDoubtChat = async (req, res) => {
           : `Doubt — ${req.user.name} & ${target.name}`,
         type: isPeer ? "student_peer" : "doubt",
         participants: pair,
-        jitsiRoomName: createJitsiRoomName("doubt", key),
+        videoRoomId: createVideoRoomId("doubt", key),
         createdBy: req.user._id,
       });
     }
@@ -144,17 +145,14 @@ export const getVideoConfig = async (req, res) => {
     const conv = await Conversation.findById(req.params.id);
     if (!conv) return res.status(404).json({ success: false, message: "Chat not found." });
 
-    if (!conv.jitsiRoomName) {
-      conv.jitsiRoomName = createJitsiRoomName("room", conv._id);
-      await conv.save();
-    }
+    const roomId = await ensureVideoRoomId(conv, "room", "_id");
 
     res.json({
       success: true,
       data: {
-        domain: getJitsiDomain(),
-        roomName: conv.jitsiRoomName,
-        url: buildJitsiUrl(conv.jitsiRoomName, req.user.name),
+        roomId,
+        roomName: roomId,
+        iceServers: getIceServers(),
       },
     });
   } catch (error) {
@@ -162,7 +160,7 @@ export const getVideoConfig = async (req, res) => {
   }
 };
 
-/** Live classes with Jitsi — role-based */
+/** Live classes — role-based */
 export const getLiveClasses = async (req, res) => {
   try {
     let filter = { date: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } };
@@ -183,19 +181,10 @@ export const getLiveClasses = async (req, res) => {
       .sort({ date: 1, startTime: 1 });
 
     for (const s of schedules) {
-      if (!s.jitsiRoomName) {
-        s.jitsiRoomName = createJitsiRoomName("class", s._id);
-        await s.save();
-      }
+      await ensureVideoRoomId(s, "class", "_id");
     }
 
-    const withUrls = schedules.map((s) => ({
-      ...s.toObject(),
-      jitsiUrl: buildJitsiUrl(s.jitsiRoomName, req.user.name),
-      jitsiDomain: getJitsiDomain(),
-    }));
-
-    res.json({ success: true, data: withUrls });
+    res.json({ success: true, data: schedules });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -211,18 +200,15 @@ export const getLiveClassVideo = async (req, res) => {
       return res.status(404).json({ success: false, message: "Class not found." });
     }
 
-    if (!schedule.jitsiRoomName) {
-      schedule.jitsiRoomName = createJitsiRoomName("class", schedule._id);
-      await schedule.save();
-    }
+    const roomId = await ensureVideoRoomId(schedule, "class", "_id");
 
     res.json({
       success: true,
       data: {
         schedule,
-        domain: getJitsiDomain(),
-        roomName: schedule.jitsiRoomName,
-        url: buildJitsiUrl(schedule.jitsiRoomName, req.user.name),
+        roomId,
+        roomName: roomId,
+        iceServers: getIceServers(),
       },
     });
   } catch (error) {

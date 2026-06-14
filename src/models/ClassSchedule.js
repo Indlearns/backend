@@ -12,6 +12,7 @@ const classScheduleSchema = new mongoose.Schema(
     startTime: { type: String, required: true },
     endTime: { type: String, required: true },
     meetLink: { type: String, default: "" },
+    videoRoomId: { type: String, default: "" },
     jitsiRoomName: { type: String, default: "" },
     tutor: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     notes: { type: String, default: "" },

@@ -2,6 +2,10 @@ import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import {
+  registerVideoSignaling,
+  handleVideoDisconnect,
+} from "./videoSignaling.js";
 
 const getSocketUser = async (socket) => {
   const token = socket.handshake.auth?.token;
@@ -24,6 +28,8 @@ export const initSocket = (io) => {
 
     socket.data.user = user;
     console.log(`Socket connected: ${user.email} (${user.role})`);
+
+    registerVideoSignaling(io, socket, user);
 
     socket.on("join_conversation", (conversationId) => {
       socket.join(`conv_${conversationId}`);
@@ -63,6 +69,7 @@ export const initSocket = (io) => {
     });
 
     socket.on("disconnect", () => {
+      handleVideoDisconnect(io, socket);
       console.log(`Socket disconnected: ${user.email}`);
     });
   });
