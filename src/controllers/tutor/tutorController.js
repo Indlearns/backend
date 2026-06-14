@@ -12,7 +12,8 @@ import {
   assertTutorSchedule,
 } from "../../utils/tutorAccess.js";
 import { createVideoRoomId, ensureVideoRoomId } from "../../utils/videoRoom.js";
-import { getIceServers } from "../../config/iceConfig.js";
+import { joinLiveClassForUser } from "../../utils/classScheduleJoin.js";
+import { syncScheduleParticipants } from "../../utils/classAccess.js";
 import { ROLES } from "../../config/roleConfig.js";
 
 export const getDashboard = async (req, res) => {
@@ -58,9 +59,14 @@ export const getMyBatches = async (req, res) => {
 export const getMyClasses = async (req, res) => {
   try {
     const batches = await Batch.find({ tutor: req.user._id }).select("_id");
-    const filter = { batch: { $in: batches.map((b) => b._id) } };
+    const batchIds = batches.map((b) => b._id);
+
+    const filter = {
+      $or: [{ tutor: req.user._id }, { participants: req.user._id }, { batch: { $in: batchIds } }],
+    };
     if (req.query.upcoming === "true") {
       filter.date = { $gte: new Date(new Date().setHours(0, 0, 0, 0)) };
+      filter.status = { $in: ["scheduled", "live"] };
     }
 
     const schedules = await ClassSchedule.find(filter)
@@ -69,6 +75,7 @@ export const getMyClasses = async (req, res) => {
       .sort({ date: 1, startTime: 1 });
 
     for (const s of schedules) {
+      await syncScheduleParticipants(s, s.batch);
       await ensureVideoRoomId(s, "class", "_id");
     }
 
@@ -80,21 +87,8 @@ export const getMyClasses = async (req, res) => {
 
 export const joinClass = async (req, res) => {
   try {
-    const schedule = await assertTutorSchedule(req.user._id, req.params.id);
-    const roomId = await ensureVideoRoomId(schedule, "class", "_id");
-    if (schedule.status === "scheduled") {
-      schedule.status = "live";
-      await schedule.save();
-    }
-    res.json({
-      success: true,
-      data: {
-        schedule,
-        roomId,
-        roomName: roomId,
-        iceServers: getIceServers(),
-      },
-    });
+    const data = await joinLiveClassForUser(req.params.id, req.user);
+    res.json({ success: true, data });
   } catch (error) {
     res.status(error.status || 500).json({ success: false, message: error.message });
   }

@@ -21,6 +21,7 @@ const classScheduleSchema = new mongoose.Schema(
       enum: ["scheduled", "live", "completed", "cancelled"],
       default: "scheduled",
     },
+    participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

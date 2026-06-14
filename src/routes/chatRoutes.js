@@ -10,6 +10,7 @@ import {
   getVideoConfig,
   getLiveClasses,
   getLiveClassVideo,
+  joinLiveClass,
 } from "../controllers/chatController.js";
 import {
   getStaffDirectory,
@@ -48,6 +49,7 @@ router.post("/conversations/:id/messages", sendMessage);
 router.get("/conversations/:id/video", getVideoConfig);
 
 router.get("/live-classes", getLiveClasses);
+router.post("/live-classes/:scheduleId/join", joinLiveClass);
 router.get("/live-classes/:scheduleId/video", getLiveClassVideo);
 
 export default router;

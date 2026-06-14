@@ -7,6 +7,8 @@ import { ROLES } from "../config/roleConfig.js";
 import { validateDoubtPair, getAllowedContactsQuery } from "../utils/chatPermissions.js";
 import { createVideoRoomId, ensureVideoRoomId } from "../utils/videoRoom.js";
 import { getIceServers } from "../config/iceConfig.js";
+import { syncScheduleParticipants } from "../utils/classAccess.js";
+import { joinLiveClassForUser } from "../utils/classScheduleJoin.js";
 
 const populateConv = (q) =>
   q.populate("batch", "name").populate("participants", "name email role");
@@ -160,27 +162,32 @@ export const getVideoConfig = async (req, res) => {
   }
 };
 
-/** Live classes — role-based */
+/** Live classes — role-based listing */
 export const getLiveClasses = async (req, res) => {
   try {
-    let filter = { date: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } };
+    const today = new Date(new Date().setHours(0, 0, 0, 0));
+    let filter = {
+      date: { $gte: today },
+      status: { $in: ["scheduled", "live"] },
+    };
 
     if (req.user.role === ROLES.TUTOR) {
-      filter.tutor = req.user._id;
+      filter.$or = [{ tutor: req.user._id }, { participants: req.user._id }];
     } else if ([ROLES.ADMIN, ROLES.SUPERADMIN].includes(req.user.role)) {
-      // staff sees all upcoming classes
+      // staff sees all upcoming / live classes
     } else if (req.user.role === ROLES.STUDENT) {
-      const batches = await Batch.find({ students: req.user._id }).select("_id");
-      filter.batch = { $in: batches.map((b) => b._id) };
+      filter.participants = req.user._id;
     }
 
     const schedules = await ClassSchedule.find(filter)
       .populate("batch", "name course")
       .populate({ path: "batch", populate: { path: "course", select: "title" } })
       .populate("tutor", "name email")
+      .populate("participants", "name email role")
       .sort({ date: 1, startTime: 1 });
 
     for (const s of schedules) {
+      await syncScheduleParticipants(s, s.batch);
       await ensureVideoRoomId(s, "class", "_id");
     }
 
@@ -190,28 +197,21 @@ export const getLiveClasses = async (req, res) => {
   }
 };
 
+/** Start (if scheduled) and join video room */
+export const joinLiveClass = async (req, res) => {
+  try {
+    const data = await joinLiveClassForUser(req.params.scheduleId, req.user);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(error.status || 500).json({ success: false, message: error.message });
+  }
+};
+
 export const getLiveClassVideo = async (req, res) => {
   try {
-    const schedule = await ClassSchedule.findById(req.params.scheduleId).populate(
-      "batch",
-      "name"
-    );
-    if (!schedule) {
-      return res.status(404).json({ success: false, message: "Class not found." });
-    }
-
-    const roomId = await ensureVideoRoomId(schedule, "class", "_id");
-
-    res.json({
-      success: true,
-      data: {
-        schedule,
-        roomId,
-        roomName: roomId,
-        iceServers: getIceServers(),
-      },
-    });
+    const data = await joinLiveClassForUser(req.params.scheduleId, req.user);
+    res.json({ success: true, data });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(error.status || 500).json({ success: false, message: error.message });
   }
 };
