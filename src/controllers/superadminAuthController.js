@@ -49,7 +49,7 @@ export const requestSuperAdminCode = async (req, res) => {
     if (!user || !user.isActive) {
       return res.status(503).json({
         success: false,
-        message: "Super admin account is not ready. Check SUPER_ADMIN_PASSWORD on the server.",
+        message: "Super admin account is not ready. Contact support.",
       });
     }
 

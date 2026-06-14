@@ -1,22 +1,28 @@
+import crypto from "crypto";
 import User from "../models/User.js";
 import { getSuperAdminEmail, ROLES } from "../config/roleConfig.js";
+
+/** Internal password when OTP login is used — never shown or used for sign-in */
+const internalPassword = () => crypto.randomBytes(24).toString("hex");
 
 export const seedSuperAdmin = async () => {
   const email = getSuperAdminEmail();
   const password = process.env.SUPER_ADMIN_PASSWORD;
 
-  if (!password || password.length < 6) {
-    console.warn("⚠️  SUPER_ADMIN_PASSWORD missing — super admin not seeded.");
-    return;
-  }
-
   let user = await User.findOne({ email }).select("+password");
 
   if (!user) {
+    const seedPassword =
+      password && password.length >= 6 ? password : internalPassword();
+    if (!password || password.length < 6) {
+      console.warn(
+        "⚠️  SUPER_ADMIN_PASSWORD not set — creating super admin with internal password (OTP login only)."
+      );
+    }
     await User.create({
       name: "Super Admin",
       email,
-      password,
+      password: seedPassword,
       role: ROLES.SUPERADMIN,
       isActive: true,
     });
@@ -34,7 +40,7 @@ export const seedSuperAdmin = async () => {
     user.isActive = true;
     updated = true;
   }
-  if (process.env.SUPER_ADMIN_RESET_PASSWORD === "true") {
+  if (process.env.SUPER_ADMIN_RESET_PASSWORD === "true" && password?.length >= 6) {
     user.password = password;
     updated = true;
     console.log("🔑 Super admin password reset from .env");
