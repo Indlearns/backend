@@ -7,6 +7,7 @@ import {
   isReservedEmail,
   canUseForgotPassword,
 } from "../config/roleConfig.js";
+import { getClientUrl } from "../config/clientUrl.js";
 
 export const register = async (req, res) => {
   try {
@@ -127,7 +128,7 @@ export const forgotPassword = async (req, res) => {
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     });
 
-    const resetUrl = `${process.env.CLIENT_URL || "http://localhost:5173"}/reset-password?token=${resetToken}`;
+    const resetUrl = `${getClientUrl()}/reset-password?token=${resetToken}`;
 
     res.json({
       success: true,

@@ -12,20 +12,20 @@ import apiRoutes from "./routes/index.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { initSocket } from "./socket/index.js";
 import { getRazorpayKeyId, isRazorpayConfigured } from "./config/razorpay.js";
+import { getClientUrl, corsOptions, socketCorsOptions } from "./config/clientUrl.js";
+import { isEmailConfigured } from "./utils/sendEmail.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../.env") });
+
+const clientUrl = getClientUrl();
 
 const app = express();
 const httpServer = createServer(app);
 
 // Socket.IO - real-time communication (chat, live classes in later phases)
 const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
+  cors: socketCorsOptions,
 });
 
 initSocket(io);
@@ -36,12 +36,7 @@ connectDB()
   .catch((err) => console.error("Startup error:", err.message));
 
 // Middleware
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -60,6 +55,7 @@ const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, () => {
   console.log(`IndLearn server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(`CORS allowed frontend: ${clientUrl}`);
   const keyId = getRazorpayKeyId();
   if (isRazorpayConfigured()) {
     console.log(
@@ -68,6 +64,11 @@ httpServer.listen(PORT, () => {
   } else {
     console.log("Razorpay: not configured — add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to backend/.env");
   }
+  console.log(
+    isEmailConfigured()
+      ? "Email (SMTP): configured — super admin OTP will be emailed"
+      : "Email (SMTP): not configured — super admin OTP logged to console only"
+  );
 });
 
 export { io };
