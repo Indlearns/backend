@@ -20,6 +20,13 @@ export const getPayPalApiBase = () =>
 export const getPayPalCheckoutCurrency = () =>
   process.env.PAYPAL_CURRENCY?.trim().toUpperCase() || "USD";
 
+/** Whether to show debit/credit card button (requires PayPal Advanced Card Processing on live). */
+export const isPayPalCardEnabled = () =>
+  String(process.env.PAYPAL_ENABLE_CARD || "true").toLowerCase() !== "false";
+
+export const getPayPalBuyerCountry = () =>
+  process.env.PAYPAL_BUYER_COUNTRY?.trim().toUpperCase() || "IN";
+
 /** How many INR equal 1 USD when converting listed INR prices for PayPal. */
 export const getInrPerUsd = () => {
   const rate = Number(process.env.PAYPAL_INR_PER_USD);

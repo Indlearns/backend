@@ -5,11 +5,31 @@ const normalizeOrigin = (value) =>
 export const getClientUrl = () =>
   normalizeOrigin(process.env.CLIENT_URL || "http://localhost:5173");
 
+const withWwwVariants = (origin) => {
+  const variants = new Set([origin]);
+  if (!origin) return variants;
+
+  try {
+    const url = new URL(origin.startsWith("http") ? origin : `https://${origin}`);
+    const host = url.hostname;
+    if (host.startsWith("www.")) {
+      variants.add(`${url.protocol}//${host.slice(4)}`);
+    } else {
+      variants.add(`${url.protocol}//www.${host}`);
+    }
+  } catch {
+    // ignore invalid URL
+  }
+  return variants;
+};
+
 const buildAllowedOrigins = () => {
   const origins = new Set([
-    getClientUrl(),
+    ...withWwwVariants(getClientUrl()),
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://indlearns.com",
+    "https://www.indlearns.com",
   ]);
   return origins;
 };

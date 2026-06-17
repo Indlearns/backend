@@ -16,15 +16,37 @@ const assertConfigured = () => {
   }
 };
 
-const parsePayPalError = async (res) => {
-  let body = {};
+const readPayPalBody = async (res) => {
   try {
-    body = await res.json();
+    return await res.json();
   } catch {
-    // ignore
+    return {};
   }
-  const detail = body?.details?.[0]?.description || body?.message;
-  return detail || `PayPal request failed (${res.status})`;
+};
+
+const buildPayPalError = (res, body = {}) => {
+  const detail = body?.details?.[0];
+  const issue = detail?.issue || body?.name || "";
+  const description =
+    detail?.description || body?.message || `PayPal request failed (${res.status})`;
+
+  let message = description;
+
+  if (res.status === 401 || issue === "INVALID_CLIENT") {
+    message =
+      "PayPal credentials are invalid. Check PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET match the same Live app.";
+  } else if (res.status === 403 || issue === "PAYEE_ACCOUNT_RESTRICTED") {
+    message =
+      "PayPal live account is restricted. Complete business verification in PayPal and enable card payments (Advanced Credit and Debit Card Processing).";
+  } else if (issue === "CURRENCY_NOT_SUPPORTED") {
+    message = "PayPal does not support this currency for your account. Set PAYPAL_CURRENCY=USD on the server.";
+  }
+
+  const err = new Error(message);
+  err.status = res.status;
+  err.paypalCode = issue;
+  err.paypalDetails = body;
+  return err;
 };
 
 export const getPayPalAccessToken = async () => {
@@ -48,7 +70,7 @@ export const getPayPalAccessToken = async () => {
   });
 
   if (!res.ok) {
-    throw new Error(await parsePayPalError(res));
+    throw buildPayPalError(res, await readPayPalBody(res));
   }
 
   const data = await res.json();
@@ -72,6 +94,12 @@ export const createPayPalOrder = async ({ amount, currency, description, customI
     },
     body: JSON.stringify({
       intent: "CAPTURE",
+      application_context: {
+        brand_name: "INDLearns",
+        landing_page: "NO_PREFERENCE",
+        shipping_preference: "NO_SHIPPING",
+        user_action: "PAY_NOW",
+      },
       purchase_units: [
         {
           amount: {
@@ -86,7 +114,7 @@ export const createPayPalOrder = async ({ amount, currency, description, customI
   });
 
   if (!res.ok) {
-    throw new Error(await parsePayPalError(res));
+    throw buildPayPalError(res, await readPayPalBody(res));
   }
 
   return res.json();
@@ -99,7 +127,7 @@ export const getPayPalOrder = async (orderId) => {
   });
 
   if (!res.ok) {
-    throw new Error(await parsePayPalError(res));
+    throw buildPayPalError(res, await readPayPalBody(res));
   }
 
   return res.json();
@@ -115,11 +143,9 @@ export const capturePayPalOrder = async (orderId) => {
     },
   });
 
-  const data = await res.json();
+  const data = await readPayPalBody(res);
   if (!res.ok) {
-    const err = new Error(await parsePayPalError(res));
-    err.paypal = data;
-    throw err;
+    throw buildPayPalError(res, data);
   }
 
   return data;

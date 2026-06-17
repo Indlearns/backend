@@ -1,6 +1,6 @@
 import express from "express";
-import { protect, authorize } from "../middleware/authMiddleware.js";
-import { ROLES } from "../config/roleConfig.js";
+import { protect } from "../middleware/authMiddleware.js";
+import { requireStudentForPayment } from "../middleware/paymentMiddleware.js";
 import {
   getPaymentConfig,
   createCourseOrder,
@@ -16,7 +16,7 @@ const router = express.Router();
 
 router.get("/config", getPaymentConfig);
 
-router.use(protect, authorize(ROLES.STUDENT));
+router.use(protect, requireStudentForPayment);
 
 router.get("/my-purchases", getMyPurchases);
 router.get("/course/:courseId/access", checkCourseAccess);

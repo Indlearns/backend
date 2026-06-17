@@ -7,6 +7,8 @@ import {
   getPayPalClientId,
   getPayPalCheckoutCurrency,
   getPayPalMode,
+  getPayPalBuyerCountry,
+  isPayPalCardEnabled,
   isPayPalConfigured,
 } from "../config/paypal.js";
 import {
@@ -75,7 +77,10 @@ export const getPaymentConfig = async (req, res) => {
       enabled,
       provider: "paypal",
       testMode: enabled && getPayPalMode() === "sandbox",
+      mode: getPayPalMode(),
       currency: getPayPalCheckoutCurrency(),
+      enableCard: isPayPalCardEnabled(),
+      buyerCountry: getPayPalBuyerCountry(),
     },
   });
 };
@@ -158,7 +163,12 @@ export const createCourseOrder = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(error.status || 500).json({ success: false, message: error.message });
+    const status = error.status || 500;
+    res.status(status).json({
+      success: false,
+      message: error.message || "Payment failed.",
+      code: error.paypalCode || error.code || undefined,
+    });
   }
 };
 
@@ -229,7 +239,12 @@ export const createWorkshopOrder = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(error.status || 500).json({ success: false, message: error.message });
+    const status = error.status || 500;
+    res.status(status).json({
+      success: false,
+      message: error.message || "Payment failed.",
+      code: error.paypalCode || error.code || undefined,
+    });
   }
 };
 
