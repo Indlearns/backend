@@ -5,6 +5,7 @@ import WorkshopPurchase from "../models/WorkshopPurchase.js";
 import User from "../models/User.js";
 import {
   getPayPalClientId,
+  getPayPalCheckoutCurrency,
   getPayPalMode,
   isPayPalConfigured,
 } from "../config/paypal.js";
@@ -13,6 +14,7 @@ import {
   createPayPalOrder,
   getPayPalCaptureId,
 } from "../utils/paypalClient.js";
+import { resolvePayPalCharge } from "../utils/paypalCurrency.js";
 import { isEnrollmentClosed } from "../utils/courseEnrollment.js";
 import { isRegistrationClosed } from "../utils/workshopRegistration.js";
 import { isFreePrice } from "../utils/pricing.js";
@@ -45,18 +47,20 @@ export const getPaymentConfig = async (req, res) => {
       enabled,
       provider: "paypal",
       testMode: enabled && getPayPalMode() === "sandbox",
+      currency: getPayPalCheckoutCurrency(),
     },
   });
 };
 
 const createGatewayOrder = async (amount, currency, description, customId) => {
+  const charge = resolvePayPalCharge(amount, currency);
   const order = await createPayPalOrder({
-    amount,
-    currency,
+    amount: charge.amount,
+    currency: charge.currency,
     description,
     customId,
   });
-  return order;
+  return { order, charge };
 };
 
 export const createCourseOrder = async (req, res) => {
@@ -107,7 +111,7 @@ export const createCourseOrder = async (req, res) => {
       });
     }
 
-    const order = await createGatewayOrder(
+    const { order, charge } = await createGatewayOrder(
       course.price,
       course.currency,
       course.title,
@@ -120,8 +124,11 @@ export const createCourseOrder = async (req, res) => {
       success: true,
       data: {
         orderId: order.id,
-        amount: course.price,
-        currency: order.purchase_units?.[0]?.amount?.currency_code || course.currency || "INR",
+        amount: charge.amount,
+        currency: charge.currency,
+        converted: charge.converted,
+        listAmount: charge.listAmount,
+        listCurrency: charge.listCurrency,
         clientId: getPayPalClientId(),
         item: { _id: course._id, title: course.title, price: course.price },
       },
@@ -179,7 +186,7 @@ export const createWorkshopOrder = async (req, res) => {
       });
     }
 
-    const order = await createGatewayOrder(
+    const { order, charge } = await createGatewayOrder(
       workshop.price,
       workshop.currency,
       workshop.title,
@@ -192,8 +199,11 @@ export const createWorkshopOrder = async (req, res) => {
       success: true,
       data: {
         orderId: order.id,
-        amount: workshop.price,
-        currency: order.purchase_units?.[0]?.amount?.currency_code || workshop.currency || "INR",
+        amount: charge.amount,
+        currency: charge.currency,
+        converted: charge.converted,
+        listAmount: charge.listAmount,
+        listCurrency: charge.listCurrency,
         clientId: getPayPalClientId(),
         item: { _id: workshop._id, title: workshop.title, price: workshop.price },
       },

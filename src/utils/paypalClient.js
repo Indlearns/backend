@@ -75,7 +75,7 @@ export const createPayPalOrder = async ({ amount, currency, description, customI
       purchase_units: [
         {
           amount: {
-            currency_code: currency || "INR",
+            currency_code: currency || "USD",
             value: value.toFixed(2),
           },
           description: (description || "INDLearns purchase").slice(0, 127),

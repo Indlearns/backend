@@ -16,7 +16,7 @@ try {
   await getPayPalAccessToken();
   const order = await createPayPalOrder({
     amount: 1,
-    currency: "INR",
+    currency: "USD",
     description: "INDLearns PayPal test",
     customId: "test-order",
   });

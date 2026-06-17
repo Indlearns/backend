@@ -15,3 +15,13 @@ export const getPayPalApiBase = () =>
   getPayPalMode() === "live"
     ? "https://api-m.paypal.com"
     : "https://api-m.sandbox.paypal.com";
+
+/** Currency sent to PayPal Orders API (USD works on all accounts; INR often does not). */
+export const getPayPalCheckoutCurrency = () =>
+  process.env.PAYPAL_CURRENCY?.trim().toUpperCase() || "USD";
+
+/** How many INR equal 1 USD when converting listed INR prices for PayPal. */
+export const getInrPerUsd = () => {
+  const rate = Number(process.env.PAYPAL_INR_PER_USD);
+  return Number.isFinite(rate) && rate > 0 ? rate : 83;
+};
