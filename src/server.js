@@ -69,6 +69,7 @@ httpServer.listen(PORT, () => {
       ? "Email (SMTP): configured — super admin OTP will be emailed"
       : "Email (SMTP): not configured — super admin OTP logged to console only"
   );
+  console.log("Course images: stored in MongoDB GridFS (persistent across deploys)");
 });
 
 export { io };

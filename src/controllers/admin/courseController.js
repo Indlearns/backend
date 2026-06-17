@@ -1,6 +1,10 @@
 import Course from "../../models/Course.js";
 import CoursePurchase from "../../models/CoursePurchase.js";
-import { getCourseImageUrl } from "../../middleware/uploadMiddleware.js";
+import {
+  saveCourseImage,
+  courseImagePublicPath,
+  deleteCourseImageByThumbnail,
+} from "../../utils/courseImageStorage.js";
 import { parseEnrollmentCloseDate } from "../../utils/courseEnrollment.js";
 import {
   groupByMonth,
@@ -53,9 +57,8 @@ export const createCourse = async (req, res) => {
     }
 
     if (req.file) {
-
-      data.thumbnail = getCourseImageUrl(req.file.filename);
-
+      const fileId = await saveCourseImage(req.file);
+      data.thumbnail = courseImagePublicPath(fileId);
     }
 
     const course = await Course.create({ ...data, createdBy: req.user._id });
@@ -125,9 +128,11 @@ export const updateCourse = async (req, res) => {
     }
 
     if (req.file) {
-
-      course.thumbnail = getCourseImageUrl(req.file.filename);
-
+      if (course.thumbnail) {
+        await deleteCourseImageByThumbnail(course.thumbnail);
+      }
+      const fileId = await saveCourseImage(req.file);
+      course.thumbnail = courseImagePublicPath(fileId);
     }
 
 
@@ -147,13 +152,15 @@ export const updateCourse = async (req, res) => {
 
 
 export const deleteCourse = async (req, res) => {
-
-  const course = await Course.findByIdAndDelete(req.params.id);
-
+  const course = await Course.findById(req.params.id);
   if (!course) return res.status(404).json({ success: false, message: "Course not found." });
 
-  res.json({ success: true, message: "Course deleted." });
+  if (course.thumbnail) {
+    await deleteCourseImageByThumbnail(course.thumbnail);
+  }
 
+  await Course.findByIdAndDelete(req.params.id);
+  res.json({ success: true, message: "Course deleted." });
 };
 
 export const getCourseEnrollments = async (req, res) => {

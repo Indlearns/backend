@@ -7,6 +7,7 @@ import tutorRoutes from "./tutorRoutes.js";
 import studentRoutes from "./studentRoutes.js";
 import publicRoutes from "./publicRoutes.js";
 import paymentRoutes from "./paymentRoutes.js";
+import mediaRoutes from "./mediaRoutes.js";
 
 const router = express.Router();
 
@@ -22,6 +23,7 @@ router.get("/health", (req, res) => {
 // Mount route modules
 router.use("/auth", authRoutes);
 router.use("/public", publicRoutes);
+router.use("/media", mediaRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/superadmin", superadminRoutes);
 router.use("/admin", adminRoutes);
