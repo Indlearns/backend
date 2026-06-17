@@ -9,16 +9,12 @@ const startOfToday = () => {
 export const getHome = async (req, res) => {
   try {
     const today = startOfToday();
-    const workshopFilter = {
+    const upcomingFilter = {
       status: { $in: ["upcoming", "ongoing"] },
       date: { $gte: today },
-      eventType: "workshop",
     };
-    const hackathonFilter = {
-      status: { $in: ["upcoming", "ongoing"] },
-      date: { $gte: today },
-      eventType: "hackathon",
-    };
+    const workshopFilter = { ...upcomingFilter, eventType: { $ne: "hackathon" } };
+    const hackathonFilter = { ...upcomingFilter, eventType: "hackathon" };
 
     const [courses, workshops, hackathons, courseCount, workshopCount, hackathonCount] =
       await Promise.all([
@@ -93,8 +89,8 @@ export const getWorkshops = async (req, res) => {
     };
     if (req.query.eventType === "hackathon") {
       filter.eventType = "hackathon";
-    } else if (req.query.eventType === "workshop") {
-      filter.eventType = "workshop";
+    } else {
+      filter.eventType = { $ne: "hackathon" };
     }
     const workshops = await Workshop.find(filter).sort({ date: 1, startTime: 1 });
     res.json({ success: true, count: workshops.length, data: workshops });
