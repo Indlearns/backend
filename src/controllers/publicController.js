@@ -9,23 +9,34 @@ const startOfToday = () => {
 export const getHome = async (req, res) => {
   try {
     const today = startOfToday();
-    const [courses, workshops, courseCount, workshopCount] = await Promise.all([
+    const workshopFilter = {
+      status: { $in: ["upcoming", "ongoing"] },
+      date: { $gte: today },
+      eventType: "workshop",
+    };
+    const hackathonFilter = {
+      status: { $in: ["upcoming", "ongoing"] },
+      date: { $gte: today },
+      eventType: "hackathon",
+    };
+
+    const [courses, workshops, hackathons, courseCount, workshopCount, hackathonCount] =
+      await Promise.all([
       Course.find({ status: "published" })
         .select("-createdBy")
         .sort({ createdAt: -1 })
         .limit(6),
-      Workshop.find({
-        status: { $in: ["upcoming", "ongoing"] },
-        date: { $gte: today },
-      })
+      Workshop.find(workshopFilter)
+        .select("-createdBy")
+        .sort({ date: 1 })
+        .limit(4),
+      Workshop.find(hackathonFilter)
         .select("-createdBy")
         .sort({ date: 1 })
         .limit(4),
       Course.countDocuments({ status: "published" }),
-      Workshop.countDocuments({
-        status: { $in: ["upcoming", "ongoing"] },
-        date: { $gte: today },
-      }),
+      Workshop.countDocuments(workshopFilter),
+      Workshop.countDocuments(hackathonFilter),
     ]);
 
     res.json({
@@ -33,9 +44,11 @@ export const getHome = async (req, res) => {
       data: {
         courses,
         workshops,
+        hackathons,
         counts: {
           courses: courseCount,
           workshops: workshopCount,
+          hackathons: hackathonCount,
         },
       },
     });
@@ -78,6 +91,11 @@ export const getWorkshops = async (req, res) => {
       status: { $in: ["upcoming", "ongoing"] },
       date: { $gte: today },
     };
+    if (req.query.eventType === "hackathon") {
+      filter.eventType = "hackathon";
+    } else if (req.query.eventType === "workshop") {
+      filter.eventType = "workshop";
+    }
     const workshops = await Workshop.find(filter).sort({ date: 1, startTime: 1 });
     res.json({ success: true, count: workshops.length, data: workshops });
   } catch (error) {
