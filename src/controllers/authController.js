@@ -214,6 +214,7 @@ const getLoginHint = (expectedRole) => {
     [ROLES.TUTOR]: "Invalid credentials. Ask super admin for your tutor login.",
     [ROLES.ADMIN]: "Invalid credentials. Use /admins/login with admin account.",
     [ROLES.SUPERADMIN]: "Invalid credentials. Use /superadmin/login only.",
+    [ROLES.PARTNER]: "Invalid credentials. Use /partners/login with your company account.",
   };
   return hints[expectedRole] || "Invalid email or password.";
 };
@@ -224,6 +225,7 @@ const getWrongPortalMessage = (actual, expected) => {
     [ROLES.ADMIN]: "/admins/login",
     [ROLES.TUTOR]: "/login (Tutor tab)",
     [ROLES.STUDENT]: "/login (Student tab)",
+    [ROLES.PARTNER]: "/partners/login",
   };
   return `This account is "${actual}". Please use ${portals[actual] || "the correct login page"}.`;
 };

@@ -18,6 +18,10 @@ import {
   getResumeData,
   getCareerJobs,
 } from "../controllers/student/studentPhase4Controller.js";
+import {
+  applyToJob,
+  getMyApplications,
+} from "../controllers/student/jobApplicationController.js";
 
 const router = express.Router();
 
@@ -31,6 +35,8 @@ router.get("/profile", getProfile);
 router.put("/profile", updateProfile);
 router.get("/resume", getResumeData);
 router.get("/career/jobs", getCareerJobs);
+router.post("/career/jobs/:jobId/apply", applyToJob);
+router.get("/career/applications", getMyApplications);
 
 router.get("/assignments", getMyAssignments);
 router.post("/assignments/:id/submit", submitAssignment);

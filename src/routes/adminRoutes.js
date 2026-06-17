@@ -24,7 +24,7 @@ import {
   deleteWorkshop,
 } from "../controllers/admin/workshopController.js";
 import {
-  createCompany,
+  createPartnerCompany,
   getCompanies,
   updateCompany,
   deleteCompany,
@@ -81,7 +81,7 @@ router.get("/workshops", getWorkshops);
 router.put("/workshops/:id", updateWorkshop);
 router.delete("/workshops/:id", deleteWorkshop);
 
-router.post("/companies", createCompany);
+router.post("/companies", createPartnerCompany);
 router.get("/companies", getCompanies);
 router.put("/companies/:id", updateCompany);
 router.delete("/companies/:id", deleteCompany);

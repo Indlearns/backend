@@ -6,6 +6,7 @@ import ClassSchedule from "../../models/ClassSchedule.js";
 import Conversation from "../../models/Conversation.js";
 import StudentProfile from "../../models/StudentProfile.js";
 import JobListing from "../../models/JobListing.js";
+import JobApplication from "../../models/JobApplication.js";
 import User from "../../models/User.js";
 import {
   getStudentEnrollments,
@@ -292,10 +293,25 @@ export const getCareerJobs = async (req, res) => {
       jobs = matched.length ? matched : jobs;
     }
 
+    const myApplications = await JobApplication.find({
+      student: req.user._id,
+      job: { $in: jobs.map((j) => j._id) },
+    }).select("job status createdAt");
+
+    const appByJob = Object.fromEntries(
+      myApplications.map((a) => [String(a.job), { status: a.status, appliedAt: a.createdAt }])
+    );
+
+    const jobsWithApply = jobs.map((j) => ({
+      ...j.toObject(),
+      canApplyInApp: Boolean(j.companyRef),
+      application: appByJob[String(j._id)] || null,
+    }));
+
     res.json({
       success: true,
       data: {
-        jobs,
+        jobs: jobsWithApply,
         matchedSkills: skills,
         courseCategories: categories,
       },

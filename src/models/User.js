@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
  * - admin      : created by superadmin — no self password reset
  * - tutor      : created by superadmin — no self password reset
  * - student    : self-register — forgot password allowed
+ * - partner    : created by admin — company hiring portal
  */
 const userSchema = new mongoose.Schema(
   {
@@ -32,9 +33,11 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["superadmin", "admin", "tutor", "student"],
+      enum: ["superadmin", "admin", "tutor", "student", "partner"],
       required: true,
     },
+    /** Partner accounts — linked company record */
+    company: { type: mongoose.Schema.Types.ObjectId, ref: "Company", default: null },
     avatar: { type: String, default: "" },
     phone: { type: String, default: "" },
     isActive: { type: Boolean, default: true },

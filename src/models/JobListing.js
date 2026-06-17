@@ -4,6 +4,7 @@ const jobListingSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
     company: { type: String, required: true, trim: true },
+    companyRef: { type: mongoose.Schema.Types.ObjectId, ref: "Company", default: null },
     description: { type: String, default: "" },
     location: { type: String, default: "Remote" },
     jobType: {

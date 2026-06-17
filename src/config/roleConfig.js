@@ -3,6 +3,7 @@ export const ROLES = {
   ADMIN: "admin",
   TUTOR: "tutor",
   STUDENT: "student",
+  PARTNER: "partner",
 };
 
 export const getSuperAdminEmail = () =>
