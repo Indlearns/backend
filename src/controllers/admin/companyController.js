@@ -1,7 +1,7 @@
-import User from "../models/User.js";
-import Company from "../models/Company.js";
-import JobListing from "../models/JobListing.js";
-import JobApplication from "../models/JobApplication.js";
+import User from "../../models/User.js";
+import Company from "../../models/Company.js";
+import JobListing from "../../models/JobListing.js";
+import JobApplication from "../../models/JobApplication.js";
 import { ROLES } from "../../config/roleConfig.js";
 import { generateSecurePassword } from "../../utils/generatePassword.js";
 import { getPartnerCompany, buildStudentProgressPayload } from "../../utils/partnerHelpers.js";
