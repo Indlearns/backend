@@ -11,7 +11,7 @@ import { seedSuperAdmin } from "./scripts/seedAdmins.js";
 import apiRoutes from "./routes/index.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { initSocket } from "./socket/index.js";
-import { getRazorpayKeyId, isRazorpayConfigured } from "./config/razorpay.js";
+import { getPayPalClientId, getPayPalMode, isPayPalConfigured } from "./config/paypal.js";
 import { getClientUrl, corsOptions, socketCorsOptions } from "./config/clientUrl.js";
 import { isEmailConfigured } from "./utils/sendEmail.js";
 
@@ -56,13 +56,12 @@ httpServer.listen(PORT, () => {
   console.log(`IndLearn server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`CORS allowed frontend: ${clientUrl}`);
-  const keyId = getRazorpayKeyId();
-  if (isRazorpayConfigured()) {
+  if (isPayPalConfigured()) {
     console.log(
-      `Razorpay: ${keyId.startsWith("rzp_test_") ? "TEST mode" : "LIVE mode"} (${keyId.slice(0, 12)}...)`
+      `PayPal: ${getPayPalMode() === "sandbox" ? "SANDBOX" : "LIVE"} (${getPayPalClientId().slice(0, 12)}...)`
     );
   } else {
-    console.log("Razorpay: not configured — add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to backend/.env");
+    console.log("PayPal: not configured — add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET to backend/.env");
   }
   console.log(
     isEmailConfigured()

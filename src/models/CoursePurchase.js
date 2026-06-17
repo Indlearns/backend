@@ -14,6 +14,9 @@ const coursePurchaseSchema = new mongoose.Schema(
     },
     amount: { type: Number, required: true },
     currency: { type: String, default: "INR" },
+    paymentGateway: { type: String, default: "paypal" },
+    paymentOrderId: { type: String, default: "" },
+    paymentTransactionId: { type: String, default: "" },
     razorpayOrderId: { type: String, default: "" },
     razorpayPaymentId: { type: String, default: "" },
     razorpaySignature: { type: String, default: "" },
@@ -27,6 +30,6 @@ const coursePurchaseSchema = new mongoose.Schema(
 );
 
 coursePurchaseSchema.index({ student: 1, course: 1 }, { unique: true });
-coursePurchaseSchema.index({ razorpayOrderId: 1 });
+coursePurchaseSchema.index({ paymentOrderId: 1 });
 
 export default mongoose.model("CoursePurchase", coursePurchaseSchema);

@@ -14,6 +14,9 @@ const workshopPurchaseSchema = new mongoose.Schema(
     },
     amount: { type: Number, required: true },
     currency: { type: String, default: "INR" },
+    paymentGateway: { type: String, default: "paypal" },
+    paymentOrderId: { type: String, default: "" },
+    paymentTransactionId: { type: String, default: "" },
     razorpayOrderId: { type: String, default: "" },
     razorpayPaymentId: { type: String, default: "" },
     razorpaySignature: { type: String, default: "" },
@@ -27,6 +30,6 @@ const workshopPurchaseSchema = new mongoose.Schema(
 );
 
 workshopPurchaseSchema.index({ student: 1, workshop: 1 }, { unique: true });
-workshopPurchaseSchema.index({ razorpayOrderId: 1 });
+workshopPurchaseSchema.index({ paymentOrderId: 1 });
 
 export default mongoose.model("WorkshopPurchase", workshopPurchaseSchema);

@@ -28,10 +28,13 @@ export const formatEnrollmentRow = (purchase, course) => {
     courseTitle: course?.title || "",
     amount: purchase.amount ?? 0,
     currency: purchase.currency || "INR",
-    paymentId: purchase.razorpayPaymentId || "",
-    orderId: purchase.razorpayOrderId || "",
+    paymentId: purchase.paymentTransactionId || purchase.razorpayPaymentId || "",
+    orderId: purchase.paymentOrderId || purchase.razorpayOrderId || "",
     enrolledAt: purchase.createdAt,
-    source: purchase.amount > 0 ? "razorpay" : "free",
+    source:
+      purchase.amount > 0
+        ? purchase.paymentGateway || (purchase.razorpayPaymentId ? "razorpay" : "paypal")
+        : "free",
   };
 };
 
@@ -44,8 +47,8 @@ export const enrollmentsToCsv = (rows) => {
     "Amount",
     "Currency",
     "Payment Type",
-    "Razorpay Payment ID",
-    "Razorpay Order ID",
+    "Payment ID",
+    "Payment Order ID",
     "Enrolled Date",
     "Month",
   ];

@@ -1,15 +1,18 @@
-import crypto from "crypto";
 import Course from "../models/Course.js";
 import Workshop from "../models/Workshop.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import WorkshopPurchase from "../models/WorkshopPurchase.js";
 import User from "../models/User.js";
 import {
-  getRazorpay,
-  getRazorpayKeyId,
-  getRazorpayKeySecret,
-  isRazorpayConfigured,
-} from "../config/razorpay.js";
+  getPayPalClientId,
+  getPayPalMode,
+  isPayPalConfigured,
+} from "../config/paypal.js";
+import {
+  captureOrGetCompletedPayPalOrder,
+  createPayPalOrder,
+  getPayPalCaptureId,
+} from "../utils/paypalClient.js";
 import { isEnrollmentClosed } from "../utils/courseEnrollment.js";
 import { isRegistrationClosed } from "../utils/workshopRegistration.js";
 import { isFreePrice } from "../utils/pricing.js";
@@ -32,34 +35,28 @@ const grantWorkshopAccess = async (studentId, workshopId) => {
   });
 };
 
-export const getRazorpayConfig = async (req, res) => {
-  const keyId = getRazorpayKeyId();
-  const enabled = isRazorpayConfigured();
+export const getPaymentConfig = async (req, res) => {
+  const clientId = getPayPalClientId();
+  const enabled = isPayPalConfigured();
   res.json({
     success: true,
     data: {
-      keyId: enabled ? keyId : "",
+      clientId: enabled ? clientId : "",
       enabled,
-      testMode: enabled && keyId.startsWith("rzp_test_"),
+      provider: "paypal",
+      testMode: enabled && getPayPalMode() === "sandbox",
     },
   });
 };
 
-const createRazorpayOrder = async (amountRupees, currency, receipt, notes) => {
-  const razorpay = getRazorpay();
-  if (!razorpay) {
-    const err = new Error("Payment gateway is not configured. Add Razorpay keys to backend .env");
-    err.status = 503;
-    throw err;
-  }
-  const amountPaise = Math.round(amountRupees * 100);
-  const order = await razorpay.orders.create({
-    amount: amountPaise,
-    currency: currency || "INR",
-    receipt,
-    notes,
+const createGatewayOrder = async (amount, currency, description, customId) => {
+  const order = await createPayPalOrder({
+    amount,
+    currency,
+    description,
+    customId,
   });
-  return { order, amountPaise };
+  return order;
 };
 
 export const createCourseOrder = async (req, res) => {
@@ -99,6 +96,7 @@ export const createCourseOrder = async (req, res) => {
           course: course._id,
           amount: 0,
           status: "paid",
+          paymentGateway: "free",
         },
         { upsert: true, new: true }
       );
@@ -109,16 +107,11 @@ export const createCourseOrder = async (req, res) => {
       });
     }
 
-    const { order, amountPaise } = await createRazorpayOrder(
+    const order = await createGatewayOrder(
       course.price,
       course.currency,
-      `course_${course._id.toString().slice(-8)}_${Date.now()}`,
-      {
-        type: "course",
-        courseId: String(course._id),
-        studentId: String(req.user._id),
-        title: course.title,
-      }
+      course.title,
+      `course:${course._id}:${req.user._id}`
     );
 
     await upsertPendingCoursePurchase(req.user._id, course, order.id);
@@ -127,9 +120,9 @@ export const createCourseOrder = async (req, res) => {
       success: true,
       data: {
         orderId: order.id,
-        amount: amountPaise,
-        currency: order.currency,
-        keyId: getRazorpayKeyId(),
+        amount: course.price,
+        currency: order.purchase_units?.[0]?.amount?.currency_code || course.currency || "INR",
+        clientId: getPayPalClientId(),
         item: { _id: course._id, title: course.title, price: course.price },
       },
     });
@@ -175,6 +168,7 @@ export const createWorkshopOrder = async (req, res) => {
           workshop: workshop._id,
           amount: 0,
           status: "paid",
+          paymentGateway: "free",
         },
         { upsert: true, new: true }
       );
@@ -185,16 +179,11 @@ export const createWorkshopOrder = async (req, res) => {
       });
     }
 
-    const { order, amountPaise } = await createRazorpayOrder(
+    const order = await createGatewayOrder(
       workshop.price,
       workshop.currency,
-      `event_${workshop._id.toString().slice(-8)}_${Date.now()}`,
-      {
-        type: "workshop",
-        workshopId: String(workshop._id),
-        studentId: String(req.user._id),
-        title: workshop.title,
-      }
+      workshop.title,
+      `workshop:${workshop._id}:${req.user._id}`
     );
 
     await upsertPendingWorkshopPurchase(req.user._id, workshop, order.id);
@@ -203,9 +192,9 @@ export const createWorkshopOrder = async (req, res) => {
       success: true,
       data: {
         orderId: order.id,
-        amount: amountPaise,
-        currency: order.currency,
-        keyId: getRazorpayKeyId(),
+        amount: workshop.price,
+        currency: order.purchase_units?.[0]?.amount?.currency_code || workshop.currency || "INR",
+        clientId: getPayPalClientId(),
         item: { _id: workshop._id, title: workshop.title, price: workshop.price },
       },
     });
@@ -214,43 +203,41 @@ export const createWorkshopOrder = async (req, res) => {
   }
 };
 
+const finalizePaidPurchase = async (purchase, orderId, captureId) => {
+  if (purchase.status !== "paid") {
+    purchase.status = "paid";
+    purchase.paymentGateway = "paypal";
+    purchase.paymentOrderId = orderId;
+    purchase.paymentTransactionId = captureId;
+    await purchase.save();
+  }
+};
+
 export const verifyCoursePayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, courseId } =
-      req.body;
+    const { orderId, courseId } = req.body;
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ success: false, message: "Missing payment details." });
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: "Missing PayPal order ID." });
     }
 
-    const purchase = await findCoursePurchaseForVerify(
-      req.user._id,
-      razorpay_order_id,
-      courseId
-    );
+    const purchase = await findCoursePurchaseForVerify(req.user._id, orderId, courseId);
 
     if (!purchase) {
       return res.status(404).json({ success: false, message: "Order not found." });
     }
 
     if (purchase.status !== "paid") {
-      const secret = getRazorpayKeySecret();
-      if (!secret) {
+      if (!isPayPalConfigured()) {
         return res.status(503).json({ success: false, message: "Payment not configured." });
       }
 
-      const body = `${razorpay_order_id}|${razorpay_payment_id}`;
-      const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
-
-      if (expected !== razorpay_signature) {
-        return res.status(400).json({ success: false, message: "Invalid payment signature." });
+      const captured = await captureOrGetCompletedPayPalOrder(orderId);
+      if (captured.status !== "COMPLETED") {
+        return res.status(400).json({ success: false, message: "Payment was not completed." });
       }
 
-      purchase.status = "paid";
-      purchase.razorpayOrderId = razorpay_order_id;
-      purchase.razorpayPaymentId = razorpay_payment_id;
-      purchase.razorpaySignature = razorpay_signature;
-      await purchase.save();
+      await finalizePaidPurchase(purchase, orderId, getPayPalCaptureId(captured));
     }
 
     await grantCourseAccess(req.user._id, purchase.course);
@@ -269,41 +256,29 @@ export const verifyCoursePayment = async (req, res) => {
 
 export const verifyWorkshopPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, workshopId } =
-      req.body;
+    const { orderId, workshopId } = req.body;
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ success: false, message: "Missing payment details." });
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: "Missing PayPal order ID." });
     }
 
-    const purchase = await findWorkshopPurchaseForVerify(
-      req.user._id,
-      razorpay_order_id,
-      workshopId
-    );
+    const purchase = await findWorkshopPurchaseForVerify(req.user._id, orderId, workshopId);
 
     if (!purchase) {
       return res.status(404).json({ success: false, message: "Order not found." });
     }
 
     if (purchase.status !== "paid") {
-      const secret = getRazorpayKeySecret();
-      if (!secret) {
+      if (!isPayPalConfigured()) {
         return res.status(503).json({ success: false, message: "Payment not configured." });
       }
 
-      const body = `${razorpay_order_id}|${razorpay_payment_id}`;
-      const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
-
-      if (expected !== razorpay_signature) {
-        return res.status(400).json({ success: false, message: "Invalid payment signature." });
+      const captured = await captureOrGetCompletedPayPalOrder(orderId);
+      if (captured.status !== "COMPLETED") {
+        return res.status(400).json({ success: false, message: "Payment was not completed." });
       }
 
-      purchase.status = "paid";
-      purchase.razorpayOrderId = razorpay_order_id;
-      purchase.razorpayPaymentId = razorpay_payment_id;
-      purchase.razorpaySignature = razorpay_signature;
-      await purchase.save();
+      await finalizePaidPurchase(purchase, orderId, getPayPalCaptureId(captured));
     }
 
     await grantWorkshopAccess(req.user._id, purchase.workshop);

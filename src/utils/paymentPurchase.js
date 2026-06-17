@@ -1,6 +1,10 @@
 import CoursePurchase from "../models/CoursePurchase.js";
 import WorkshopPurchase from "../models/WorkshopPurchase.js";
 
+const orderLookup = (orderId) => ({
+  $or: [{ paymentOrderId: orderId }, { razorpayOrderId: orderId }],
+});
+
 export const upsertPendingCoursePurchase = async (studentId, course, orderId) => {
   return CoursePurchase.findOneAndUpdate(
     { student: studentId, course: course._id },
@@ -9,7 +13,10 @@ export const upsertPendingCoursePurchase = async (studentId, course, orderId) =>
       course: course._id,
       amount: course.price,
       currency: course.currency || "INR",
-      razorpayOrderId: orderId,
+      paymentGateway: "paypal",
+      paymentOrderId: orderId,
+      paymentTransactionId: "",
+      razorpayOrderId: "",
       razorpayPaymentId: "",
       razorpaySignature: "",
       status: "pending",
@@ -26,7 +33,10 @@ export const upsertPendingWorkshopPurchase = async (studentId, workshop, orderId
       workshop: workshop._id,
       amount: workshop.price,
       currency: workshop.currency || "INR",
-      razorpayOrderId: orderId,
+      paymentGateway: "paypal",
+      paymentOrderId: orderId,
+      paymentTransactionId: "",
+      razorpayOrderId: "",
       razorpayPaymentId: "",
       razorpaySignature: "",
       status: "pending",
@@ -38,7 +48,7 @@ export const upsertPendingWorkshopPurchase = async (studentId, workshop, orderId
 export const findCoursePurchaseForVerify = async (studentId, orderId, courseId) => {
   let purchase = await CoursePurchase.findOne({
     student: studentId,
-    razorpayOrderId: orderId,
+    ...orderLookup(orderId),
   });
 
   if (!purchase && courseId) {
@@ -54,7 +64,7 @@ export const findCoursePurchaseForVerify = async (studentId, orderId, courseId) 
 export const findWorkshopPurchaseForVerify = async (studentId, orderId, workshopId) => {
   let purchase = await WorkshopPurchase.findOne({
     student: studentId,
-    razorpayOrderId: orderId,
+    ...orderLookup(orderId),
   });
 
   if (!purchase && workshopId) {

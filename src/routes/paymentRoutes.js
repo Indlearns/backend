@@ -2,7 +2,7 @@ import express from "express";
 import { protect, authorize } from "../middleware/authMiddleware.js";
 import { ROLES } from "../config/roleConfig.js";
 import {
-  getRazorpayConfig,
+  getPaymentConfig,
   createCourseOrder,
   createWorkshopOrder,
   verifyCoursePayment,
@@ -14,7 +14,7 @@ import {
 
 const router = express.Router();
 
-router.get("/config", getRazorpayConfig);
+router.get("/config", getPaymentConfig);
 
 router.use(protect, authorize(ROLES.STUDENT));
 
