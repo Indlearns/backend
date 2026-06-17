@@ -37,6 +37,34 @@ const grantWorkshopAccess = async (studentId, workshopId) => {
   });
 };
 
+const hasCourseAccess = async (student, courseId) => {
+  const alreadyInProfile = (student?.enrolledCourses || [])
+    .map(String)
+    .includes(String(courseId));
+  if (alreadyInProfile) return true;
+
+  const paidPurchase = await CoursePurchase.exists({
+    student: student?._id,
+    course: courseId,
+    status: "paid",
+  });
+  return Boolean(paidPurchase);
+};
+
+const hasWorkshopAccess = async (student, workshopId) => {
+  const alreadyInProfile = (student?.registeredWorkshops || [])
+    .map(String)
+    .includes(String(workshopId));
+  if (alreadyInProfile) return true;
+
+  const paidPurchase = await WorkshopPurchase.exists({
+    student: student?._id,
+    workshop: workshopId,
+    status: "paid",
+  });
+  return Boolean(paidPurchase);
+};
+
 export const getPaymentConfig = async (req, res) => {
   const clientId = getPayPalClientId();
   const enabled = isPayPalConfigured();
@@ -78,12 +106,8 @@ export const createCourseOrder = async (req, res) => {
       });
     }
 
-    const existing = await CoursePurchase.findOne({
-      student: req.user._id,
-      course: course._id,
-      status: "paid",
-    });
-    if (existing) {
+    const alreadyPurchased = await hasCourseAccess(req.user, course._id);
+    if (alreadyPurchased) {
       await grantCourseAccess(req.user._id, course._id);
       return res.json({
         success: true,
@@ -153,12 +177,8 @@ export const createWorkshopOrder = async (req, res) => {
       });
     }
 
-    const existing = await WorkshopPurchase.findOne({
-      student: req.user._id,
-      workshop: workshop._id,
-      status: "paid",
-    });
-    if (existing) {
+    const alreadyRegistered = await hasWorkshopAccess(req.user, workshop._id);
+    if (alreadyRegistered) {
       await grantWorkshopAccess(req.user._id, workshop._id);
       return res.json({
         success: true,
