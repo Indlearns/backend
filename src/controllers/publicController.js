@@ -1,20 +1,21 @@
 import Course from "../models/Course.js";
 import Workshop from "../models/Workshop.js";
-const startOfToday = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
+import Company from "../models/Company.js";
+import {
+  buildPublicWorkshopFilter,
+  buildAdminWorkshopTypeFilter,
+  startOfToday,
+} from "../utils/workshopVisibility.js";
 
 export const getHome = async (req, res) => {
   try {
     const today = startOfToday();
     const upcomingFilter = {
-      status: { $in: ["upcoming", "ongoing"] },
-      date: { $gte: today },
+      status: { $in: ["upcoming", "ongoing", "live"] },
+      $or: [{ date: { $gte: today } }, { registrationCloseDate: { $gte: today } }],
     };
-    const workshopFilter = { ...upcomingFilter, eventType: { $ne: "hackathon" } };
-    const hackathonFilter = { ...upcomingFilter, eventType: "hackathon" };
+    const workshopFilter = { ...upcomingFilter, ...buildAdminWorkshopTypeFilter("workshop") };
+    const hackathonFilter = { ...upcomingFilter, ...buildAdminWorkshopTypeFilter("hackathon") };
 
     const [courses, workshops, hackathons, courseCount, workshopCount, hackathonCount] =
       await Promise.all([
@@ -82,16 +83,7 @@ export const getCourseById = async (req, res) => {
 
 export const getWorkshops = async (req, res) => {
   try {
-    const today = startOfToday();
-    const filter = {
-      status: { $in: ["upcoming", "ongoing"] },
-      date: { $gte: today },
-    };
-    if (req.query.eventType === "hackathon") {
-      filter.eventType = "hackathon";
-    } else {
-      filter.eventType = { $ne: "hackathon" };
-    }
+    const filter = buildPublicWorkshopFilter(req.query.eventType);
     const workshops = await Workshop.find(filter).sort({ date: 1, startTime: 1 });
     res.json({ success: true, count: workshops.length, data: workshops });
   } catch (error) {

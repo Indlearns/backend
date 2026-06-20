@@ -6,12 +6,23 @@ import User from "../../models/User.js";
 import ClassSchedule from "../../models/ClassSchedule.js";
 import { ROLES } from "../../config/roleConfig.js";
 
+import { buildAdminWorkshopTypeFilter } from "../../utils/workshopVisibility.js";
+
 export const getDashboard = async (req, res) => {
   try {
-    const [courses, workshops, batches, companies, tutors, students, upcomingClasses] =
-      await Promise.all([
+    const [
+      courses,
+      workshops,
+      hackathons,
+      batches,
+      companies,
+      tutors,
+      students,
+      upcomingClasses,
+    ] = await Promise.all([
         Course.countDocuments(),
-        Workshop.countDocuments(),
+        Workshop.countDocuments(buildAdminWorkshopTypeFilter("workshop")),
+        Workshop.countDocuments(buildAdminWorkshopTypeFilter("hackathon")),
         Batch.countDocuments(),
         Company.countDocuments({ isActive: true }),
         User.countDocuments({ role: ROLES.TUTOR, isActive: true }),
@@ -29,6 +40,7 @@ export const getDashboard = async (req, res) => {
         stats: {
           courses,
           workshops,
+          hackathons,
           batches,
           companies,
           tutors,

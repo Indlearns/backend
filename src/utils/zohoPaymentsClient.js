@@ -11,6 +11,12 @@ import {
   getZohoAccountsBase,
   isZohoPaymentsConfigured,
 } from "../config/zohoPayments.js";
+import {
+  formatZohoAmount,
+  getZohoPaymentMethods,
+  mapZohoPaymentError,
+  normalizeIndianPhone,
+} from "./zohoPaymentFormat.js";
 
 let cachedAccessToken = null;
 let tokenExpiresAt = 0;
@@ -32,7 +38,7 @@ const parseZohoError = async (res) => {
   } catch {
     // ignore
   }
-  return body?.message || body?.error || `Zoho Payments request failed (${res.status})`;
+  return mapZohoPaymentError(body, res.status);
 };
 
 export const getZohoAccessToken = async () => {
@@ -108,6 +114,7 @@ export const createZohoPaymentSession = async ({
   description,
   email,
   phone,
+  name,
   successUrl,
   failureUrl,
   udf1,
@@ -115,27 +122,53 @@ export const createZohoPaymentSession = async ({
   udf3,
 }) => {
   const token = await getZohoAccessToken();
-  const value = Number(amount);
-  if (!Number.isFinite(value) || value <= 0) {
+  const formattedAmount = formatZohoAmount(amount);
+  if (!formattedAmount) {
     throw new Error("Invalid payment amount.");
   }
 
+  const normalizedPhone = normalizeIndianPhone(phone);
+  if (!normalizedPhone) {
+    const err = new Error(
+      "A valid 10-digit mobile number is required. Add it in your student profile before paying."
+    );
+    err.status = 400;
+    throw err;
+  }
+
+  const customerEmail = String(email || "").trim();
+  if (!customerEmail) {
+    const err = new Error("A valid email is required on your student account before paying.");
+    err.status = 400;
+    throw err;
+  }
+
+  const hostedParams = {
+    phone_country_code: "IN",
+    phone: normalizedPhone,
+    name: String(name || "Student").slice(0, 100),
+    email: customerEmail,
+    description: (description || "INDLearns purchase").slice(0, 127),
+    success_url: successUrl,
+    failure_url: failureUrl,
+    udf1: udf1 || "",
+    udf2: udf2 || "",
+    udf3: udf3 || "",
+  };
+
+  const configurations = {
+    hosted_checkout_parameters: hostedParams,
+  };
+
+  const paymentMethods = getZohoPaymentMethods();
+  if (paymentMethods) {
+    configurations.allowed_payment_methods = paymentMethods;
+  }
+
   const body = {
-    amount: String(value),
+    amount: formattedAmount,
     currency: currency || "INR",
-    configurations: {
-      allowed_payment_methods: ["upi", "card", "net_banking"],
-      hosted_checkout_parameters: {
-        success_url: successUrl,
-        failure_url: failureUrl,
-        description: (description || "INDLearns purchase").slice(0, 127),
-        email: email || "",
-        phone: phone || "",
-        udf1: udf1 || "",
-        udf2: udf2 || "",
-        udf3: udf3 || "",
-      },
-    },
+    configurations,
   };
 
   const url = `${getZohoPaymentsApiBase()}/paymentsessions?account_id=${encodeURIComponent(getZohoAccountId())}`;

@@ -134,6 +134,7 @@ const createGatewaySession = async (item, purchaseType, student) => {
     description: item.title,
     email: student.email,
     phone: student.phone || "",
+    name: student.name || "",
     successUrl,
     failureUrl,
     udf1: purchaseType,

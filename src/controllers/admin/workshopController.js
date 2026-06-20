@@ -1,18 +1,28 @@
 import Workshop from "../../models/Workshop.js";
 import { parseRegistrationCloseDate } from "../../utils/workshopRegistration.js";
 
+import {
+  buildAdminWorkshopTypeFilter,
+  normalizeEventType,
+} from "../../utils/workshopVisibility.js";
+
 const parseWorkshopBody = (body) => {
   const price = Number(body.price) || 0;
+  const rawStatus = String(body.status || "upcoming").toLowerCase();
+  const status = rawStatus === "live" ? "ongoing" : rawStatus;
+
   return {
     title: body.title,
     description: body.description || "",
-    eventType: body.eventType || "workshop",
+    eventType: normalizeEventType(body.eventType),
     date: body.date,
     startTime: body.startTime || "10:00",
     endTime: body.endTime || "12:00",
     meetLink: body.meetLink || "",
     maxParticipants: body.maxParticipants || 100,
-    status: body.status || "upcoming",
+    status: ["upcoming", "ongoing", "completed", "cancelled"].includes(status)
+      ? status
+      : "upcoming",
     price,
     currency: body.currency || "INR",
     isFree: price <= 0,
@@ -61,6 +71,16 @@ export const updateWorkshop = async (req, res) => {
     fields.forEach((f) => {
       if (req.body[f] !== undefined) workshop[f] = req.body[f];
     });
+    if (req.body.status !== undefined) {
+      const rawStatus = String(req.body.status).toLowerCase();
+      const status = rawStatus === "live" ? "ongoing" : rawStatus;
+      if (["upcoming", "ongoing", "completed", "cancelled"].includes(status)) {
+        workshop.status = status;
+      }
+    }
+    if (req.body.eventType !== undefined) {
+      workshop.eventType = normalizeEventType(req.body.eventType);
+    }
     if (req.body.price !== undefined) {
       workshop.price = Number(req.body.price) || 0;
       workshop.isFree = workshop.price <= 0;
