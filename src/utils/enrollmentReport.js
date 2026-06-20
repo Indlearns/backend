@@ -33,7 +33,7 @@ export const formatEnrollmentRow = (purchase, course) => {
     enrolledAt: purchase.createdAt,
     source:
       purchase.amount > 0
-        ? purchase.paymentGateway || (purchase.razorpayPaymentId ? "razorpay" : "paypal")
+        ? purchase.paymentGateway || (purchase.razorpayPaymentId ? "razorpay" : "zoho")
         : "free",
   };
 };

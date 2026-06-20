@@ -11,7 +11,7 @@ import { seedSuperAdmin } from "./scripts/seedAdmins.js";
 import apiRoutes from "./routes/index.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { initSocket } from "./socket/index.js";
-import { getPayPalClientId, getPayPalMode, isPayPalConfigured } from "./config/paypal.js";
+import { isZohoPaymentsConfigured } from "./config/zohoPayments.js";
 import { getClientUrl, corsOptions, socketCorsOptions } from "./config/clientUrl.js";
 import { isEmailConfigured } from "./utils/sendEmail.js";
 
@@ -56,12 +56,12 @@ httpServer.listen(PORT, () => {
   console.log(`IndLearn server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`CORS allowed frontend: ${clientUrl}`);
-  if (isPayPalConfigured()) {
-    console.log(
-      `PayPal: ${getPayPalMode() === "sandbox" ? "SANDBOX" : "LIVE"} (${getPayPalClientId().slice(0, 12)}...)`
-    );
+  if (isZohoPaymentsConfigured()) {
+    console.log("Zoho Payments: configured");
   } else {
-    console.log("PayPal: not configured — add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET to backend/.env");
+    console.log(
+      "Zoho Payments: not configured — add ZOHO_PAYMENTS_* keys to backend/.env"
+    );
   }
   console.log(
     isEmailConfigured()

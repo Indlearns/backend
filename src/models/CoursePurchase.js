@@ -14,7 +14,7 @@ const coursePurchaseSchema = new mongoose.Schema(
     },
     amount: { type: Number, required: true },
     currency: { type: String, default: "INR" },
-    paymentGateway: { type: String, default: "paypal" },
+    paymentGateway: { type: String, default: "zoho" },
     paymentOrderId: { type: String, default: "" },
     paymentTransactionId: { type: String, default: "" },
     razorpayOrderId: { type: String, default: "" },

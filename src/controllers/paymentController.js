@@ -3,20 +3,11 @@ import Workshop from "../models/Workshop.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import WorkshopPurchase from "../models/WorkshopPurchase.js";
 import User from "../models/User.js";
+import { getZohoRedirectBase, isZohoPaymentsConfigured } from "../config/zohoPayments.js";
 import {
-  getPayPalClientId,
-  getPayPalCheckoutCurrency,
-  getPayPalMode,
-  getPayPalBuyerCountry,
-  isPayPalCardEnabled,
-  isPayPalConfigured,
-} from "../config/paypal.js";
-import {
-  captureOrGetCompletedPayPalOrder,
-  createPayPalOrder,
-  getPayPalCaptureId,
-} from "../utils/paypalClient.js";
-import { resolvePayPalCharge } from "../utils/paypalCurrency.js";
+  createZohoPaymentSession,
+  verifyZohoHostedCheckoutSignature,
+} from "../utils/zohoPaymentsClient.js";
 import { isEnrollmentClosed } from "../utils/courseEnrollment.js";
 import { isRegistrationClosed } from "../utils/workshopRegistration.js";
 import { isFreePrice } from "../utils/pricing.js";
@@ -67,33 +58,40 @@ const hasWorkshopAccess = async (student, workshopId) => {
   return Boolean(paidPurchase);
 };
 
+const buildReturnUrls = () => {
+  const base = getZohoRedirectBase();
+  return {
+    successUrl: `${base}/payment/return?outcome=success`,
+    failureUrl: `${base}/payment/return?outcome=failure`,
+  };
+};
+
 export const getPaymentConfig = async (req, res) => {
-  const clientId = getPayPalClientId();
-  const enabled = isPayPalConfigured();
+  const enabled = isZohoPaymentsConfigured();
   res.json({
     success: true,
     data: {
-      clientId: enabled ? clientId : "",
       enabled,
-      provider: "paypal",
-      testMode: enabled && getPayPalMode() === "sandbox",
-      mode: getPayPalMode(),
-      currency: getPayPalCheckoutCurrency(),
-      enableCard: isPayPalCardEnabled(),
-      buyerCountry: getPayPalBuyerCountry(),
+      provider: "zoho",
+      currency: "INR",
     },
   });
 };
 
-const createGatewayOrder = async (amount, currency, description, customId) => {
-  const charge = resolvePayPalCharge(amount, currency);
-  const order = await createPayPalOrder({
-    amount: charge.amount,
-    currency: charge.currency,
-    description,
-    customId,
+const createGatewaySession = async (item, purchaseType, student) => {
+  const { successUrl, failureUrl } = buildReturnUrls();
+  return createZohoPaymentSession({
+    amount: item.price,
+    currency: item.currency || "INR",
+    description: item.title,
+    email: student.email,
+    phone: student.phone || "",
+    successUrl,
+    failureUrl,
+    udf1: purchaseType,
+    udf2: String(item._id),
+    udf3: String(student._id),
   });
-  return { order, charge };
 };
 
 export const createCourseOrder = async (req, res) => {
@@ -140,34 +138,23 @@ export const createCourseOrder = async (req, res) => {
       });
     }
 
-    const { order, charge } = await createGatewayOrder(
-      course.price,
-      course.currency,
-      course.title,
-      `course:${course._id}:${req.user._id}`
-    );
-
-    await upsertPendingCoursePurchase(req.user._id, course, order.id);
+    const session = await createGatewaySession(course, "course", req.user);
+    await upsertPendingCoursePurchase(req.user._id, course, session.sessionId);
 
     res.json({
       success: true,
       data: {
-        orderId: order.id,
-        amount: charge.amount,
-        currency: charge.currency,
-        converted: charge.converted,
-        listAmount: charge.listAmount,
-        listCurrency: charge.listCurrency,
-        clientId: getPayPalClientId(),
+        sessionId: session.sessionId,
+        checkoutUrl: session.checkoutUrl,
+        amount: course.price,
+        currency: course.currency || "INR",
         item: { _id: course._id, title: course.title, price: course.price },
       },
     });
   } catch (error) {
-    const status = error.status || 500;
-    res.status(status).json({
+    res.status(error.status || 500).json({
       success: false,
       message: error.message || "Payment failed.",
-      code: error.paypalCode || error.code || undefined,
     });
   }
 };
@@ -216,84 +203,120 @@ export const createWorkshopOrder = async (req, res) => {
       });
     }
 
-    const { order, charge } = await createGatewayOrder(
-      workshop.price,
-      workshop.currency,
-      workshop.title,
-      `workshop:${workshop._id}:${req.user._id}`
-    );
-
-    await upsertPendingWorkshopPurchase(req.user._id, workshop, order.id);
+    const session = await createGatewaySession(workshop, "workshop", req.user);
+    await upsertPendingWorkshopPurchase(req.user._id, workshop, session.sessionId);
 
     res.json({
       success: true,
       data: {
-        orderId: order.id,
-        amount: charge.amount,
-        currency: charge.currency,
-        converted: charge.converted,
-        listAmount: charge.listAmount,
-        listCurrency: charge.listCurrency,
-        clientId: getPayPalClientId(),
+        sessionId: session.sessionId,
+        checkoutUrl: session.checkoutUrl,
+        amount: workshop.price,
+        currency: workshop.currency || "INR",
         item: { _id: workshop._id, title: workshop.title, price: workshop.price },
       },
     });
   } catch (error) {
-    const status = error.status || 500;
-    res.status(status).json({
+    res.status(error.status || 500).json({
       success: false,
       message: error.message || "Payment failed.",
-      code: error.paypalCode || error.code || undefined,
     });
   }
 };
 
-const finalizePaidPurchase = async (purchase, orderId, captureId) => {
+const finalizePaidPurchase = async (purchase, sessionId, paymentId) => {
   if (purchase.status !== "paid") {
     purchase.status = "paid";
-    purchase.paymentGateway = "paypal";
-    purchase.paymentOrderId = orderId;
-    purchase.paymentTransactionId = captureId;
+    purchase.paymentGateway = "zoho";
+    purchase.paymentOrderId = sessionId;
+    purchase.paymentTransactionId = paymentId || "";
     await purchase.save();
   }
 };
 
-export const verifyCoursePayment = async (req, res) => {
-  try {
-    const { orderId, courseId } = req.body;
+const processZohoReturn = async (req, res, purchaseType) => {
+  const params = req.body;
+  const {
+    payments_session_id: sessionId,
+    payment_session_status: sessionStatus,
+    payment_id: paymentId,
+    payment_status: paymentStatus,
+    udf2: itemId,
+    udf3: studentId,
+  } = params;
 
-    if (!orderId) {
-      return res.status(400).json({ success: false, message: "Missing PayPal order ID." });
-    }
+  if (!sessionId) {
+    return res.status(400).json({ success: false, message: "Missing payment session ID." });
+  }
 
-    const purchase = await findCoursePurchaseForVerify(req.user._id, orderId, courseId);
+  if (String(studentId) !== String(req.user._id)) {
+    return res.status(403).json({ success: false, message: "Payment does not belong to this account." });
+  }
 
+  if (!verifyZohoHostedCheckoutSignature(params)) {
+    return res.status(400).json({ success: false, message: "Invalid payment signature." });
+  }
+
+  const succeeded =
+    sessionStatus === "succeeded" ||
+    paymentStatus === "succeeded" ||
+    sessionStatus === "in_progress";
+
+  if (!succeeded && params.outcome === "failure") {
+    return res.status(400).json({
+      success: false,
+      message: "Payment was not completed.",
+      data: { failed: true },
+    });
+  }
+
+  if (sessionStatus === "failed" || paymentStatus === "failed") {
+    return res.status(400).json({
+      success: false,
+      message: "Payment failed.",
+      data: { failed: true },
+    });
+  }
+
+  if (purchaseType === "course") {
+    const purchase = await findCoursePurchaseForVerify(req.user._id, sessionId, itemId);
     if (!purchase) {
       return res.status(404).json({ success: false, message: "Order not found." });
     }
 
-    if (purchase.status !== "paid") {
-      if (!isPayPalConfigured()) {
-        return res.status(503).json({ success: false, message: "Payment not configured." });
-      }
-
-      const captured = await captureOrGetCompletedPayPalOrder(orderId);
-      if (captured.status !== "COMPLETED") {
-        return res.status(400).json({ success: false, message: "Payment was not completed." });
-      }
-
-      await finalizePaidPurchase(purchase, orderId, getPayPalCaptureId(captured));
-    }
-
+    await finalizePaidPurchase(purchase, sessionId, paymentId);
     await grantCourseAccess(req.user._id, purchase.course);
 
     const course = await Course.findById(purchase.course).select("title thumbnail price");
-
-    res.json({
+    return res.json({
       success: true,
       message: "Payment successful. Course access granted.",
       data: { purchase, item: course, itemType: "course" },
     });
+  }
+
+  const purchase = await findWorkshopPurchaseForVerify(req.user._id, sessionId, itemId);
+  if (!purchase) {
+    return res.status(404).json({ success: false, message: "Order not found." });
+  }
+
+  await finalizePaidPurchase(purchase, sessionId, paymentId);
+  await grantWorkshopAccess(req.user._id, purchase.workshop);
+
+  const workshop = await Workshop.findById(purchase.workshop).select(
+    "title price eventType meetLink date"
+  );
+
+  return res.json({
+    success: true,
+    message: "Payment successful. You are registered for this event.",
+    data: { purchase, item: workshop, itemType: "workshop" },
+  });
+};
+
+export const verifyCoursePayment = async (req, res) => {
+  try {
+    return await processZohoReturn(req, res, "course");
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -301,42 +324,7 @@ export const verifyCoursePayment = async (req, res) => {
 
 export const verifyWorkshopPayment = async (req, res) => {
   try {
-    const { orderId, workshopId } = req.body;
-
-    if (!orderId) {
-      return res.status(400).json({ success: false, message: "Missing PayPal order ID." });
-    }
-
-    const purchase = await findWorkshopPurchaseForVerify(req.user._id, orderId, workshopId);
-
-    if (!purchase) {
-      return res.status(404).json({ success: false, message: "Order not found." });
-    }
-
-    if (purchase.status !== "paid") {
-      if (!isPayPalConfigured()) {
-        return res.status(503).json({ success: false, message: "Payment not configured." });
-      }
-
-      const captured = await captureOrGetCompletedPayPalOrder(orderId);
-      if (captured.status !== "COMPLETED") {
-        return res.status(400).json({ success: false, message: "Payment was not completed." });
-      }
-
-      await finalizePaidPurchase(purchase, orderId, getPayPalCaptureId(captured));
-    }
-
-    await grantWorkshopAccess(req.user._id, purchase.workshop);
-
-    const workshop = await Workshop.findById(purchase.workshop).select(
-      "title price eventType meetLink date"
-    );
-
-    res.json({
-      success: true,
-      message: "Payment successful. You are registered for this event.",
-      data: { purchase, item: workshop, itemType: "workshop" },
-    });
+    return await processZohoReturn(req, res, "workshop");
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
