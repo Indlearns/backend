@@ -3,10 +3,11 @@ import Workshop from "../models/Workshop.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import WorkshopPurchase from "../models/WorkshopPurchase.js";
 import User from "../models/User.js";
-import { getZohoRedirectBase, isZohoPaymentsConfigured } from "../config/zohoPayments.js";
+import { getZohoRedirectBase, isZohoPaymentsConfigured, hasZohoOAuthCredentials, buildZohoAuthorizationUrl, getZohoOAuthRedirectUri, getZohoRefreshToken } from "../config/zohoPayments.js";
 import {
   createZohoPaymentSession,
   verifyZohoHostedCheckoutSignature,
+  exchangeZohoAuthorizationCode,
 } from "../utils/zohoPaymentsClient.js";
 import { isEnrollmentClosed } from "../utils/courseEnrollment.js";
 import { isRegistrationClosed } from "../utils/workshopRegistration.js";
@@ -74,8 +75,55 @@ export const getPaymentConfig = async (req, res) => {
       enabled,
       provider: "zoho",
       currency: "INR",
+      needsRefreshToken: hasZohoOAuthCredentials() && !enabled,
     },
   });
+};
+
+export const getZohoOAuthSetup = async (req, res) => {
+  try {
+    if (!hasZohoOAuthCredentials()) {
+      return res.status(503).json({
+        success: false,
+        message:
+          "Add ZOHO_PAYMENTS_CLIENT_ID, CLIENT_SECRET, ACCOUNT_ID, and SIGNING_KEY to backend env first.",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        authorizationUrl: buildZohoAuthorizationUrl(),
+        redirectUri: getZohoOAuthRedirectUri(),
+        configured: isZohoPaymentsConfigured(),
+        needsRefreshToken: !getZohoRefreshToken(),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const exchangeZohoOAuthCode = async (req, res) => {
+  try {
+    const { code } = req.body || {};
+    const result = await exchangeZohoAuthorizationCode(code);
+
+    res.json({
+      success: true,
+      message:
+        "Copy the refresh token below into ZOHO_PAYMENTS_REFRESH_TOKEN on Render, then redeploy the backend.",
+      data: {
+        refreshToken: result.refreshToken,
+        expiresIn: result.expiresIn,
+      },
+    });
+  } catch (error) {
+    res.status(error.status || 400).json({
+      success: false,
+      message: error.message || "Could not exchange authorization code.",
+    });
+  }
 };
 
 const createGatewaySession = async (item, purchaseType, student) => {

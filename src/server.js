@@ -11,7 +11,7 @@ import { seedSuperAdmin } from "./scripts/seedAdmins.js";
 import apiRoutes from "./routes/index.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { initSocket } from "./socket/index.js";
-import { isZohoPaymentsConfigured } from "./config/zohoPayments.js";
+import { isZohoPaymentsConfigured, hasZohoOAuthCredentials } from "./config/zohoPayments.js";
 import { getClientUrl, corsOptions, socketCorsOptions } from "./config/clientUrl.js";
 import { isEmailConfigured } from "./utils/sendEmail.js";
 
@@ -58,6 +58,10 @@ httpServer.listen(PORT, () => {
   console.log(`CORS allowed frontend: ${clientUrl}`);
   if (isZohoPaymentsConfigured()) {
     console.log("Zoho Payments: configured");
+  } else if (hasZohoOAuthCredentials()) {
+    console.log(
+      "Zoho Payments: credentials present but refresh token missing — complete OAuth via /zoho/oauth/callback"
+    );
   } else {
     console.log(
       "Zoho Payments: not configured — add ZOHO_PAYMENTS_* keys to backend/.env"

@@ -4,6 +4,7 @@ import {
   getZohoClientId,
   getZohoClientSecret,
   getZohoHostedCheckoutBase,
+  getZohoOAuthRedirectUri,
   getZohoPaymentsApiBase,
   getZohoRefreshToken,
   getZohoSigningKey,
@@ -66,6 +67,39 @@ export const getZohoAccessToken = async () => {
   cachedAccessToken = data.access_token;
   tokenExpiresAt = Date.now() + Math.max((data.expires_in || 3600) - 120, 60) * 1000;
   return cachedAccessToken;
+};
+
+/** One-time: exchange authorization code (server-based OAuth client) for refresh token. */
+export const exchangeZohoAuthorizationCode = async (code) => {
+  const trimmedCode = String(code || "").trim();
+  if (!trimmedCode) {
+    throw new Error("Authorization code is required.");
+  }
+
+  const params = new URLSearchParams({
+    code: trimmedCode,
+    client_id: getZohoClientId(),
+    client_secret: getZohoClientSecret(),
+    redirect_uri: getZohoOAuthRedirectUri(),
+    grant_type: "authorization_code",
+  });
+
+  const res = await fetch(`${getZohoAccountsBase()}/oauth/v2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.refresh_token) {
+    throw new Error(data.error || data.message || "Could not exchange authorization code.");
+  }
+
+  return {
+    refreshToken: data.refresh_token,
+    accessToken: data.access_token,
+    expiresIn: data.expires_in,
+  };
 };
 
 export const createZohoPaymentSession = async ({

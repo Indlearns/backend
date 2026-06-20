@@ -1,8 +1,11 @@
 import express from "express";
-import { protect } from "../middleware/authMiddleware.js";
+import { protect, authorize } from "../middleware/authMiddleware.js";
 import { requireStudentForPayment } from "../middleware/paymentMiddleware.js";
+import { ROLES } from "../config/roleConfig.js";
 import {
   getPaymentConfig,
+  getZohoOAuthSetup,
+  exchangeZohoOAuthCode,
   createCourseOrder,
   createWorkshopOrder,
   verifyCoursePayment,
@@ -15,6 +18,9 @@ import {
 const router = express.Router();
 
 router.get("/config", getPaymentConfig);
+
+router.get("/zoho/setup", protect, authorize(ROLES.SUPERADMIN), getZohoOAuthSetup);
+router.post("/zoho/exchange-code", protect, authorize(ROLES.SUPERADMIN), exchangeZohoOAuthCode);
 
 router.use(protect, requireStudentForPayment);
 
