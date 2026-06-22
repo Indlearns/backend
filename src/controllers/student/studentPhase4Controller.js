@@ -1,5 +1,6 @@
 import Batch from "../../models/Batch.js";
 import CoursePurchase from "../../models/CoursePurchase.js";
+import WorkshopPurchase from "../../models/WorkshopPurchase.js";
 import Assignment from "../../models/Assignment.js";
 import Submission from "../../models/Submission.js";
 import ClassSchedule from "../../models/ClassSchedule.js";
@@ -12,16 +13,27 @@ import {
   getStudentEnrollments,
   computeBatchProgress,
 } from "../../utils/studentProgress.js";
+import { isHackathonEventType } from "../../utils/workshopVisibility.js";
+
+const WORKSHOP_EVENT_FIELDS =
+  "title description eventType date startTime endTime meetLink status price currency registrationCloseDate";
 
 export const getEnrollmentStatus = async (req, res) => {
   try {
     const batchCount = await Batch.countDocuments({ students: req.user._id });
-    const [purchaseCount, user] = await Promise.all([
+    const [purchaseCount, workshopRegCount, user] = await Promise.all([
       CoursePurchase.countDocuments({ student: req.user._id, status: "paid" }),
-      User.findById(req.user._id).select("enrolledCourses"),
+      WorkshopPurchase.countDocuments({ student: req.user._id, status: "paid" }),
+      User.findById(req.user._id).select("enrolledCourses registeredWorkshops"),
     ]);
     const enrolledCourseCount = user?.enrolledCourses?.length || 0;
-    const enrolled = batchCount > 0 || purchaseCount > 0 || enrolledCourseCount > 0;
+    const registeredWorkshopCount = user?.registeredWorkshops?.length || 0;
+    const eventRegCount = Math.max(workshopRegCount, registeredWorkshopCount);
+    const enrolled =
+      batchCount > 0 ||
+      purchaseCount > 0 ||
+      enrolledCourseCount > 0 ||
+      eventRegCount > 0;
 
     res.json({
       success: true,
@@ -29,7 +41,50 @@ export const getEnrollmentStatus = async (req, res) => {
         enrolled,
         batchCount,
         purchasedCourseCount: Math.max(purchaseCount, enrolledCourseCount),
+        registeredWorkshopCount: eventRegCount,
       },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getMyEvents = async (req, res) => {
+  try {
+    const [purchases, user] = await Promise.all([
+      WorkshopPurchase.find({ student: req.user._id, status: "paid" })
+        .populate("workshop", WORKSHOP_EVENT_FIELDS)
+        .sort({ createdAt: -1 }),
+      User.findById(req.user._id).populate("registeredWorkshops", WORKSHOP_EVENT_FIELDS),
+    ]);
+
+    const byId = new Map();
+
+    for (const purchase of purchases) {
+      if (!purchase.workshop?._id) continue;
+      byId.set(String(purchase.workshop._id), {
+        ...purchase.workshop.toObject(),
+        registeredAt: purchase.createdAt,
+        paymentGateway: purchase.paymentGateway,
+      });
+    }
+
+    for (const workshop of user?.registeredWorkshops || []) {
+      if (!workshop?._id || byId.has(String(workshop._id))) continue;
+      byId.set(String(workshop._id), {
+        ...workshop.toObject(),
+        registeredAt: null,
+        paymentGateway: "free",
+      });
+    }
+
+    const all = [...byId.values()].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const workshops = all.filter((item) => !isHackathonEventType(item.eventType));
+    const hackathons = all.filter((item) => isHackathonEventType(item.eventType));
+
+    res.json({
+      success: true,
+      data: { workshops, hackathons },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

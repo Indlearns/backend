@@ -11,6 +11,7 @@ import {
 import {
   getEnrollmentStatus,
   getMyCourses,
+  getMyEvents,
   getCourseDashboard,
   getProgress,
   getProfile,
@@ -29,6 +30,7 @@ router.use(protect, authorize(ROLES.STUDENT));
 
 router.get("/enrollment-status", getEnrollmentStatus);
 router.get("/my-courses", getMyCourses);
+router.get("/my-events", getMyEvents);
 router.get("/my-courses/:batchId", getCourseDashboard);
 router.get("/progress", getProgress);
 router.get("/profile", getProfile);
