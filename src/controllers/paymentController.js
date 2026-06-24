@@ -8,6 +8,8 @@ import {
   createZohoPaymentSession,
   verifyZohoHostedCheckoutSignature,
   exchangeZohoAuthorizationCode,
+  verifyZohoWebhookSignature,
+  getZohoPaymentSession,
 } from "../utils/zohoPaymentsClient.js";
 import { isEnrollmentClosed } from "../utils/courseEnrollment.js";
 import { isRegistrationClosed } from "../utils/workshopRegistration.js";
@@ -18,6 +20,7 @@ import {
   findCoursePurchaseForVerify,
   findWorkshopPurchaseForVerify,
 } from "../utils/paymentPurchase.js";
+import { fulfillZohoPayment, markZohoPaymentFailed } from "../utils/paymentFulfillment.js";
 
 const grantCourseAccess = async (studentId, courseId) => {
   await User.findByIdAndUpdate(studentId, {
@@ -273,16 +276,6 @@ export const createWorkshopOrder = async (req, res) => {
   }
 };
 
-const finalizePaidPurchase = async (purchase, sessionId, paymentId) => {
-  if (purchase.status !== "paid") {
-    purchase.status = "paid";
-    purchase.paymentGateway = "zoho";
-    purchase.paymentOrderId = sessionId;
-    purchase.paymentTransactionId = paymentId || "";
-    await purchase.save();
-  }
-};
-
 const processZohoReturn = async (req, res, purchaseType) => {
   const params = req.body;
   const {
@@ -333,8 +326,17 @@ const processZohoReturn = async (req, res, purchaseType) => {
       return res.status(404).json({ success: false, message: "Order not found." });
     }
 
-    await finalizePaidPurchase(purchase, sessionId, paymentId);
-    await grantCourseAccess(req.user._id, purchase.course);
+    const result = await fulfillZohoPayment({
+      sessionId,
+      paymentId,
+      purchaseType: "course",
+      itemId,
+      studentId: req.user._id,
+    });
+
+    if (!result.ok) {
+      return res.status(404).json({ success: false, message: "Order not found." });
+    }
 
     const course = await Course.findById(purchase.course).select("title thumbnail price");
     return res.json({
@@ -349,8 +351,17 @@ const processZohoReturn = async (req, res, purchaseType) => {
     return res.status(404).json({ success: false, message: "Order not found." });
   }
 
-  await finalizePaidPurchase(purchase, sessionId, paymentId);
-  await grantWorkshopAccess(req.user._id, purchase.workshop);
+  const result = await fulfillZohoPayment({
+    sessionId,
+    paymentId,
+    purchaseType: "workshop",
+    itemId,
+    studentId: req.user._id,
+  });
+
+  if (!result.ok) {
+    return res.status(404).json({ success: false, message: "Order not found." });
+  }
 
   const workshop = await Workshop.findById(purchase.workshop).select(
     "title price eventType meetLink date"
@@ -430,5 +441,71 @@ export const checkWorkshopAccess = async (req, res) => {
     res.json({ success: true, data: { hasAccess, registered: Boolean(purchase) } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/** Zoho pings this URL (often GET) when registering the webhook — must return 200. */
+export const zohoWebhookPing = (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Zoho Payments webhook endpoint is ready.",
+  });
+};
+
+const resolveWebhookContext = async (sessionId) => {
+  const session = await getZohoPaymentSession(sessionId);
+  const hosted =
+    session?.configurations?.hosted_checkout_parameters ||
+    session?.configurations?.hosted_page_parameters ||
+    {};
+
+  return {
+    purchaseType: hosted.udf1 === "workshop" ? "workshop" : "course",
+    itemId: hosted.udf2 || "",
+    studentId: hosted.udf3 || "",
+  };
+};
+
+export const handleZohoWebhook = async (req, res) => {
+  const rawBody = req.rawBody || JSON.stringify(req.body || {});
+  const signatureHeader =
+    req.headers["x-zoho-webhook-signature"] || req.headers["X-Zoho-Webhook-Signature"];
+
+  if (!verifyZohoWebhookSignature(rawBody, signatureHeader)) {
+    return res.status(401).json({ success: false, message: "Invalid webhook signature." });
+  }
+
+  let payload = req.body;
+  if (!payload || typeof payload !== "object" || !Object.keys(payload).length) {
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return res.status(400).json({ success: false, message: "Invalid webhook payload." });
+    }
+  }
+
+  res.status(200).json({ success: true, received: true });
+
+  const eventType = payload.event_type || "";
+  const payment = payload.event_object?.payment || {};
+  const sessionId = payment.payments_session_id || payment.payment_session_id || "";
+  const paymentId = payment.payment_id || "";
+
+  if (!sessionId) return;
+
+  try {
+    const { purchaseType, itemId, studentId } = await resolveWebhookContext(sessionId);
+    if (!itemId || !studentId) return;
+
+    if (eventType === "payment.succeeded" || payment.status === "succeeded") {
+      await fulfillZohoPayment({ sessionId, paymentId, purchaseType, itemId, studentId });
+      return;
+    }
+
+    if (eventType === "payment.failed" || payment.status === "failed") {
+      await markZohoPaymentFailed({ sessionId, studentId, itemId, purchaseType });
+    }
+  } catch (error) {
+    console.error("Zoho webhook processing error:", error.message);
   }
 };

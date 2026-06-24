@@ -6,6 +6,8 @@ import {
   getPaymentConfig,
   getZohoOAuthSetup,
   exchangeZohoOAuthCode,
+  zohoWebhookPing,
+  handleZohoWebhook,
   createCourseOrder,
   createWorkshopOrder,
   verifyCoursePayment,
@@ -18,6 +20,10 @@ import {
 const router = express.Router();
 
 router.get("/config", getPaymentConfig);
+
+router.get("/zoho/webhook", zohoWebhookPing);
+router.head("/zoho/webhook", zohoWebhookPing);
+router.post("/zoho/webhook", handleZohoWebhook);
 
 router.get("/zoho/setup", protect, authorize(ROLES.SUPERADMIN), getZohoOAuthSetup);
 router.post("/zoho/exchange-code", protect, authorize(ROLES.SUPERADMIN), exchangeZohoOAuthCode);

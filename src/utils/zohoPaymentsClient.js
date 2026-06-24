@@ -8,6 +8,7 @@ import {
   getZohoPaymentsApiBase,
   getZohoRefreshToken,
   getZohoSigningKey,
+  getZohoWebhookSigningKey,
   getZohoAccountsBase,
   isZohoPaymentsConfigured,
 } from "../config/zohoPayments.js";
@@ -224,6 +225,23 @@ export const verifyZohoHostedCheckoutSignature = (params) => {
   const message = parts.join(".");
   const expected = crypto.createHmac("sha256", signingKey).update(message).digest("hex");
   return expected === (params.signature || "");
+};
+
+/** Verify Zoho Payments webhook (X-Zoho-Webhook-Signature: t=...,v=...). */
+export const verifyZohoWebhookSignature = (rawBody, signatureHeader) => {
+  const signingKey = getZohoWebhookSigningKey();
+  if (!signingKey || !rawBody || !signatureHeader) return false;
+
+  const header = String(signatureHeader);
+  const tMatch = header.match(/(?:^|,|\s)t=([^,\s]+)/);
+  const vMatch = header.match(/(?:^|,|\s)v=([^,\s]+)/);
+  const timestamp = tMatch?.[1];
+  const signature = vMatch?.[1];
+  if (!timestamp || !signature) return false;
+
+  const message = `${timestamp}.${rawBody}`;
+  const expected = crypto.createHmac("sha256", signingKey).update(message).digest("hex");
+  return expected === signature;
 };
 
 export const getZohoPaymentSession = async (sessionId) => {

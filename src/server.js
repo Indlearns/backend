@@ -37,7 +37,15 @@ connectDB()
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      if (req.originalUrl?.startsWith("/api/payments/zoho/webhook")) {
+        req.rawBody = buf.toString("utf8");
+      }
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 

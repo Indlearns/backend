@@ -10,6 +10,10 @@ export const getZohoAccountId = () => process.env.ZOHO_PAYMENTS_ACCOUNT_ID?.trim
 
 export const getZohoSigningKey = () => process.env.ZOHO_PAYMENTS_SIGNING_KEY?.trim() || "";
 
+/** Webhook signing key from Zoho → Settings → Developer Space → Webhooks (separate from checkout key). */
+export const getZohoWebhookSigningKey = () =>
+  process.env.ZOHO_PAYMENTS_WEBHOOK_SIGNING_KEY?.trim() || getZohoSigningKey();
+
 export const getZohoApiKey = () => process.env.ZOHO_PAYMENTS_API_KEY?.trim() || "";
 
 export const getZohoDataCenter = () => {
