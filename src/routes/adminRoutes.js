@@ -51,6 +51,8 @@ import {
 import {
   createReferralCode,
   getReferralCodes,
+  getReferralCodeUsages,
+  getAllReferralUsages,
   updateReferralCode,
   deleteReferralCode,
 } from "../controllers/admin/referralCodeController.js";
@@ -109,7 +111,9 @@ router.put("/jobs/:id", updateJob);
 router.delete("/jobs/:id", deleteJob);
 
 router.post("/referral-codes", createReferralCode);
+router.get("/referral-codes/usages", getAllReferralUsages);
 router.get("/referral-codes", getReferralCodes);
+router.get("/referral-codes/:id/usages", getReferralCodeUsages);
 router.put("/referral-codes/:id", updateReferralCode);
 router.delete("/referral-codes/:id", deleteReferralCode);
 

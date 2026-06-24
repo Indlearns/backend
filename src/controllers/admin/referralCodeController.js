@@ -1,6 +1,8 @@
 import ReferralCode from "../../models/ReferralCode.js";
 import Course from "../../models/Course.js";
 import Workshop from "../../models/Workshop.js";
+import CoursePurchase from "../../models/CoursePurchase.js";
+import WorkshopPurchase from "../../models/WorkshopPurchase.js";
 import {
   normalizeReferralCode,
   parseReferralIdList,
@@ -39,6 +41,49 @@ const applyScopeFields = (referral, body) => {
   if (body.courses !== undefined) referral.courses = parseReferralIdList(body.courses);
   if (body.workshops !== undefined) referral.workshops = parseReferralIdList(body.workshops);
   if (body.hackathons !== undefined) referral.hackathons = parseReferralIdList(body.hackathons);
+};
+
+const mapCourseUsage = (purchase) => ({
+  _id: purchase._id,
+  usedAt: purchase.updatedAt,
+  itemType: "course",
+  itemTitle: purchase.course?.title || "—",
+  student: purchase.student,
+  originalAmount: purchase.originalAmount || purchase.amount,
+  discountAmount: purchase.discountAmount || 0,
+  amountPaid: purchase.amount,
+  referralCode: purchase.referralCode,
+  paymentGateway: purchase.paymentGateway,
+});
+
+const mapWorkshopUsage = (purchase) => ({
+  _id: purchase._id,
+  usedAt: purchase.updatedAt,
+  itemType: purchase.workshop?.eventType === "hackathon" ? "hackathon" : "workshop",
+  itemTitle: purchase.workshop?.title || "—",
+  student: purchase.student,
+  originalAmount: purchase.originalAmount || purchase.amount,
+  discountAmount: purchase.discountAmount || 0,
+  amountPaid: purchase.amount,
+  referralCode: purchase.referralCode,
+  paymentGateway: purchase.paymentGateway,
+});
+
+const fetchReferralUsages = async (referralFilter) => {
+  const [coursePurchases, workshopPurchases] = await Promise.all([
+    CoursePurchase.find({ ...referralFilter, status: "paid" })
+      .populate("student", "name email phone")
+      .populate("course", "title")
+      .sort({ updatedAt: -1 }),
+    WorkshopPurchase.find({ ...referralFilter, status: "paid" })
+      .populate("student", "name email phone")
+      .populate("workshop", "title eventType")
+      .sort({ updatedAt: -1 }),
+  ]);
+
+  return [...coursePurchases.map(mapCourseUsage), ...workshopPurchases.map(mapWorkshopUsage)].sort(
+    (a, b) => new Date(b.usedAt) - new Date(a.usedAt)
+  );
 };
 
 export const createReferralCode = async (req, res) => {
@@ -88,6 +133,42 @@ export const getReferralCodes = async (req, res) => {
     .populate("hackathons", "title eventType")
     .sort({ createdAt: -1 });
   res.json({ success: true, count: codes.length, data: codes });
+};
+
+export const getReferralCodeUsages = async (req, res) => {
+  try {
+    const referral = await ReferralCode.findById(req.params.id);
+    if (!referral) {
+      return res.status(404).json({ success: false, message: "Referral code not found." });
+    }
+
+    const usages = await fetchReferralUsages({
+      $or: [{ referralCodeRef: referral._id }, { referralCode: referral.code }],
+    });
+
+    res.json({
+      success: true,
+      data: {
+        referral: { _id: referral._id, code: referral.code, discountAmount: referral.discountAmount },
+        count: usages.length,
+        usages,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getAllReferralUsages = async (req, res) => {
+  try {
+    const usages = await fetchReferralUsages({
+      $or: [{ referralCodeRef: { $ne: null } }, { referralCode: { $ne: "" } }],
+    });
+
+    res.json({ success: true, count: usages.length, data: usages });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 export const updateReferralCode = async (req, res) => {

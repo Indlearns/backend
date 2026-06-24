@@ -35,5 +35,6 @@ const coursePurchaseSchema = new mongoose.Schema(
 
 coursePurchaseSchema.index({ student: 1, course: 1 }, { unique: true });
 coursePurchaseSchema.index({ paymentOrderId: 1 });
+coursePurchaseSchema.index({ referralCodeRef: 1, status: 1 });
 
 export default mongoose.model("CoursePurchase", coursePurchaseSchema);

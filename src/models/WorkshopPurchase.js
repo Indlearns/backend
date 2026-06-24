@@ -35,5 +35,6 @@ const workshopPurchaseSchema = new mongoose.Schema(
 
 workshopPurchaseSchema.index({ student: 1, workshop: 1 }, { unique: true });
 workshopPurchaseSchema.index({ paymentOrderId: 1 });
+workshopPurchaseSchema.index({ referralCodeRef: 1, status: 1 });
 
 export default mongoose.model("WorkshopPurchase", workshopPurchaseSchema);
