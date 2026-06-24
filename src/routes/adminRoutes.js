@@ -49,6 +49,12 @@ import {
   sendMessage,
 } from "../controllers/admin/chatController.js";
 import {
+  createReferralCode,
+  getReferralCodes,
+  updateReferralCode,
+  deleteReferralCode,
+} from "../controllers/admin/referralCodeController.js";
+import {
   createJob,
   getJobs,
   updateJob,
@@ -101,6 +107,11 @@ router.post("/jobs", createJob);
 router.get("/jobs", getJobs);
 router.put("/jobs/:id", updateJob);
 router.delete("/jobs/:id", deleteJob);
+
+router.post("/referral-codes", createReferralCode);
+router.get("/referral-codes", getReferralCodes);
+router.put("/referral-codes/:id", updateReferralCode);
+router.delete("/referral-codes/:id", deleteReferralCode);
 
 router.get("/conversations", getConversations);
 router.post("/conversations/:id/join", joinConversation);

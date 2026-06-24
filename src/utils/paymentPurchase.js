@@ -5,13 +5,21 @@ const orderLookup = (orderId) => ({
   $or: [{ paymentOrderId: orderId }, { razorpayOrderId: orderId }],
 });
 
-export const upsertPendingCoursePurchase = async (studentId, course, orderId) => {
+export const upsertPendingCoursePurchase = async (studentId, course, orderId, pricing = {}) => {
+  const originalAmount = pricing.originalAmount ?? course.price;
+  const discountAmount = pricing.discountAmount ?? 0;
+  const finalAmount = pricing.finalAmount ?? course.price;
+
   return CoursePurchase.findOneAndUpdate(
     { student: studentId, course: course._id },
     {
       student: studentId,
       course: course._id,
-      amount: course.price,
+      amount: finalAmount,
+      originalAmount,
+      discountAmount,
+      referralCode: pricing.referralCode || "",
+      referralCodeRef: pricing.referralCodeId || null,
       currency: course.currency || "INR",
       paymentGateway: "zoho",
       paymentOrderId: orderId,

@@ -21,6 +21,10 @@ import {
   findWorkshopPurchaseForVerify,
 } from "../utils/paymentPurchase.js";
 import { fulfillZohoPayment, markZohoPaymentFailed } from "../utils/paymentFulfillment.js";
+import {
+  validateReferralForCourse,
+  incrementReferralUsage,
+} from "../utils/referralCode.js";
 
 const grantCourseAccess = async (studentId, courseId) => {
   await User.findByIdAndUpdate(studentId, {
@@ -129,10 +133,10 @@ export const exchangeZohoOAuthCode = async (req, res) => {
   }
 };
 
-const createGatewaySession = async (item, purchaseType, student) => {
+const createGatewaySession = async (item, purchaseType, student, { amount } = {}) => {
   const { successUrl, failureUrl } = buildReturnUrls();
   return createZohoPaymentSession({
-    amount: item.price,
+    amount: amount ?? item.price,
     currency: item.currency || "INR",
     description: item.title,
     email: student.email,
@@ -144,6 +148,40 @@ const createGatewaySession = async (item, purchaseType, student) => {
     udf2: String(item._id),
     udf3: String(student._id),
   });
+};
+
+export const validateCourseReferralCode = async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.courseId);
+    if (!course || course.status !== "published") {
+      return res.status(404).json({ success: false, message: "Course not available." });
+    }
+
+    if (isFreePrice(course)) {
+      return res.status(400).json({
+        success: false,
+        message: "Referral codes apply to paid courses only.",
+      });
+    }
+
+    const result = await validateReferralForCourse(req.body?.referralCode, course);
+    if (!result.ok) {
+      return res.status(400).json({ success: false, message: result.message });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        referralCode: result.referral.code,
+        originalAmount: result.pricing.originalAmount,
+        discountAmount: result.pricing.discountAmount,
+        finalAmount: result.pricing.finalAmount,
+        currency: course.currency || "INR",
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 export const createCourseOrder = async (req, res) => {
@@ -190,15 +228,74 @@ export const createCourseOrder = async (req, res) => {
       });
     }
 
-    const session = await createGatewaySession(course, "course", req.user);
-    await upsertPendingCoursePurchase(req.user._id, course, session.sessionId);
+    const referralInput = req.body?.referralCode?.trim();
+    let pricing = {
+      originalAmount: course.price,
+      discountAmount: 0,
+      finalAmount: course.price,
+    };
+    let referralMeta = {};
+
+    if (referralInput) {
+      const validated = await validateReferralForCourse(referralInput, course);
+      if (!validated.ok) {
+        return res.status(400).json({ success: false, message: validated.message });
+      }
+      pricing = validated.pricing;
+      referralMeta = {
+        referralCode: validated.referral.code,
+        referralCodeId: validated.referral._id,
+      };
+    }
+
+    if (isFreePrice({ price: pricing.finalAmount })) {
+      await CoursePurchase.findOneAndUpdate(
+        { student: req.user._id, course: course._id },
+        {
+          student: req.user._id,
+          course: course._id,
+          amount: 0,
+          originalAmount: pricing.originalAmount,
+          discountAmount: pricing.discountAmount,
+          referralCode: referralMeta.referralCode || "",
+          referralCodeRef: referralMeta.referralCodeId || null,
+          status: "paid",
+          paymentGateway: referralMeta.referralCode ? "referral" : "free",
+        },
+        { upsert: true, new: true }
+      );
+      if (referralMeta.referralCodeId) {
+        await incrementReferralUsage(referralMeta.referralCodeId);
+      }
+      await grantCourseAccess(req.user._id, course._id);
+      return res.json({
+        success: true,
+        data: {
+          free: true,
+          message: "Course enrolled with referral discount (no payment required).",
+          ...pricing,
+          referralCode: referralMeta.referralCode || "",
+        },
+      });
+    }
+
+    const session = await createGatewaySession(course, "course", req.user, {
+      amount: pricing.finalAmount,
+    });
+    await upsertPendingCoursePurchase(req.user._id, course, session.sessionId, {
+      ...pricing,
+      ...referralMeta,
+    });
 
     res.json({
       success: true,
       data: {
         sessionId: session.sessionId,
         checkoutUrl: session.checkoutUrl,
-        amount: course.price,
+        amount: pricing.finalAmount,
+        originalAmount: pricing.originalAmount,
+        discountAmount: pricing.discountAmount,
+        referralCode: referralMeta.referralCode || "",
         currency: course.currency || "INR",
         item: { _id: course._id, title: course.title, price: course.price },
       },

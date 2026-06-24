@@ -5,6 +5,7 @@ import {
   findCoursePurchaseForVerify,
   findWorkshopPurchaseForVerify,
 } from "./paymentPurchase.js";
+import { incrementReferralUsage } from "./referralCode.js";
 
 const grantCourseAccess = async (studentId, courseId) => {
   await User.findByIdAndUpdate(studentId, {
@@ -25,6 +26,9 @@ const finalizePaidPurchase = async (purchase, sessionId, paymentId) => {
     purchase.paymentOrderId = sessionId;
     purchase.paymentTransactionId = paymentId || "";
     await purchase.save();
+    if (purchase.referralCodeRef) {
+      await incrementReferralUsage(purchase.referralCodeRef);
+    }
   }
 };
 
