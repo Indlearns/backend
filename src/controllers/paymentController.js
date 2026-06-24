@@ -23,6 +23,8 @@ import {
 import { fulfillZohoPayment, markZohoPaymentFailed } from "../utils/paymentFulfillment.js";
 import {
   validateReferralForCourse,
+  validateReferralForWorkshop,
+  validateReferralForItem,
   incrementReferralUsage,
 } from "../utils/referralCode.js";
 
@@ -150,6 +152,38 @@ const createGatewaySession = async (item, purchaseType, student, { amount } = {}
   });
 };
 
+const resolveReferralForOrder = async (referralInput, item) => {
+  const pricing = {
+    originalAmount: item.price,
+    discountAmount: 0,
+    finalAmount: item.price,
+  };
+  let referralMeta = {};
+
+  if (!referralInput?.trim()) {
+    return { ok: true, pricing, referralMeta };
+  }
+
+  const validated = await validateReferralForItem(referralInput, item);
+  if (!validated.ok) return validated;
+
+  return {
+    ok: true,
+    pricing: validated.pricing,
+    referralMeta: {
+      referralCode: validated.referral.code,
+      referralCodeId: validated.referral._id,
+    },
+  };
+};
+
+const referralSuccessPayload = (pricing, referralMeta) => ({
+  originalAmount: pricing.originalAmount,
+  discountAmount: pricing.discountAmount,
+  finalAmount: pricing.finalAmount,
+  referralCode: referralMeta.referralCode || "",
+});
+
 export const validateCourseReferralCode = async (req, res) => {
   try {
     const course = await Course.findById(req.params.courseId);
@@ -177,6 +211,40 @@ export const validateCourseReferralCode = async (req, res) => {
         discountAmount: result.pricing.discountAmount,
         finalAmount: result.pricing.finalAmount,
         currency: course.currency || "INR",
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const validateWorkshopReferralCode = async (req, res) => {
+  try {
+    const workshop = await Workshop.findById(req.params.workshopId);
+    if (!workshop || ["cancelled", "completed"].includes(workshop.status)) {
+      return res.status(404).json({ success: false, message: "Event not available." });
+    }
+
+    if (isFreePrice(workshop)) {
+      return res.status(400).json({
+        success: false,
+        message: "Referral codes apply to paid events only.",
+      });
+    }
+
+    const result = await validateReferralForWorkshop(req.body?.referralCode, workshop);
+    if (!result.ok) {
+      return res.status(400).json({ success: false, message: result.message });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        referralCode: result.referral.code,
+        originalAmount: result.pricing.originalAmount,
+        discountAmount: result.pricing.discountAmount,
+        finalAmount: result.pricing.finalAmount,
+        currency: workshop.currency || "INR",
       },
     });
   } catch (error) {
@@ -229,24 +297,11 @@ export const createCourseOrder = async (req, res) => {
     }
 
     const referralInput = req.body?.referralCode?.trim();
-    let pricing = {
-      originalAmount: course.price,
-      discountAmount: 0,
-      finalAmount: course.price,
-    };
-    let referralMeta = {};
-
-    if (referralInput) {
-      const validated = await validateReferralForCourse(referralInput, course);
-      if (!validated.ok) {
-        return res.status(400).json({ success: false, message: validated.message });
-      }
-      pricing = validated.pricing;
-      referralMeta = {
-        referralCode: validated.referral.code,
-        referralCodeId: validated.referral._id,
-      };
+    const referralResult = await resolveReferralForOrder(referralInput, course);
+    if (!referralResult.ok) {
+      return res.status(400).json({ success: false, message: referralResult.message });
     }
+    const { pricing, referralMeta } = referralResult;
 
     if (isFreePrice({ price: pricing.finalAmount })) {
       await CoursePurchase.findOneAndUpdate(
@@ -273,8 +328,7 @@ export const createCourseOrder = async (req, res) => {
         data: {
           free: true,
           message: "Course enrolled with referral discount (no payment required).",
-          ...pricing,
-          referralCode: referralMeta.referralCode || "",
+          ...referralSuccessPayload(pricing, referralMeta),
         },
       });
     }
@@ -352,15 +406,60 @@ export const createWorkshopOrder = async (req, res) => {
       });
     }
 
-    const session = await createGatewaySession(workshop, "workshop", req.user);
-    await upsertPendingWorkshopPurchase(req.user._id, workshop, session.sessionId);
+    const referralInput = req.body?.referralCode?.trim();
+    const referralResult = await resolveReferralForOrder(referralInput, workshop);
+    if (!referralResult.ok) {
+      return res.status(400).json({ success: false, message: referralResult.message });
+    }
+    const { pricing, referralMeta } = referralResult;
+
+    if (isFreePrice({ price: pricing.finalAmount })) {
+      await WorkshopPurchase.findOneAndUpdate(
+        { student: req.user._id, workshop: workshop._id },
+        {
+          student: req.user._id,
+          workshop: workshop._id,
+          amount: 0,
+          originalAmount: pricing.originalAmount,
+          discountAmount: pricing.discountAmount,
+          referralCode: referralMeta.referralCode || "",
+          referralCodeRef: referralMeta.referralCodeId || null,
+          status: "paid",
+          paymentGateway: referralMeta.referralCode ? "referral" : "free",
+        },
+        { upsert: true, new: true }
+      );
+      if (referralMeta.referralCodeId) {
+        await incrementReferralUsage(referralMeta.referralCodeId);
+      }
+      await grantWorkshopAccess(req.user._id, workshop._id);
+      return res.json({
+        success: true,
+        data: {
+          free: true,
+          message: "Registered with referral discount (no payment required).",
+          ...referralSuccessPayload(pricing, referralMeta),
+        },
+      });
+    }
+
+    const session = await createGatewaySession(workshop, "workshop", req.user, {
+      amount: pricing.finalAmount,
+    });
+    await upsertPendingWorkshopPurchase(req.user._id, workshop, session.sessionId, {
+      ...pricing,
+      ...referralMeta,
+    });
 
     res.json({
       success: true,
       data: {
         sessionId: session.sessionId,
         checkoutUrl: session.checkoutUrl,
-        amount: workshop.price,
+        amount: pricing.finalAmount,
+        originalAmount: pricing.originalAmount,
+        discountAmount: pricing.discountAmount,
+        referralCode: referralMeta.referralCode || "",
         currency: workshop.currency || "INR",
         item: { _id: workshop._id, title: workshop.title, price: workshop.price },
       },

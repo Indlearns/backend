@@ -11,6 +11,7 @@ import {
   createCourseOrder,
   createWorkshopOrder,
   validateCourseReferralCode,
+  validateWorkshopReferralCode,
   verifyCoursePayment,
   verifyWorkshopPayment,
   getMyPurchases,
@@ -35,6 +36,7 @@ router.get("/my-purchases", getMyPurchases);
 router.get("/course/:courseId/access", checkCourseAccess);
 router.get("/workshop/:workshopId/access", checkWorkshopAccess);
 router.post("/course/:courseId/validate-referral", validateCourseReferralCode);
+router.post("/workshop/:workshopId/validate-referral", validateWorkshopReferralCode);
 router.post("/course/:courseId/create-order", createCourseOrder);
 router.post("/workshop/:workshopId/create-order", createWorkshopOrder);
 router.post("/verify", verifyCoursePayment);

@@ -33,13 +33,21 @@ export const upsertPendingCoursePurchase = async (studentId, course, orderId, pr
   );
 };
 
-export const upsertPendingWorkshopPurchase = async (studentId, workshop, orderId) => {
+export const upsertPendingWorkshopPurchase = async (studentId, workshop, orderId, pricing = {}) => {
+  const originalAmount = pricing.originalAmount ?? workshop.price;
+  const discountAmount = pricing.discountAmount ?? 0;
+  const finalAmount = pricing.finalAmount ?? workshop.price;
+
   return WorkshopPurchase.findOneAndUpdate(
     { student: studentId, workshop: workshop._id },
     {
       student: studentId,
       workshop: workshop._id,
-      amount: workshop.price,
+      amount: finalAmount,
+      originalAmount,
+      discountAmount,
+      referralCode: pricing.referralCode || "",
+      referralCodeRef: pricing.referralCodeId || null,
       currency: workshop.currency || "INR",
       paymentGateway: "zoho",
       paymentOrderId: orderId,
