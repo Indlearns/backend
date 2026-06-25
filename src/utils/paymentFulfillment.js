@@ -6,6 +6,7 @@ import {
   findWorkshopPurchaseForVerify,
 } from "./paymentPurchase.js";
 import { incrementReferralUsage } from "./referralCode.js";
+import { notifyEnrollmentSuccess } from "./enrollmentEmail.js";
 
 const grantCourseAccess = async (studentId, courseId) => {
   await User.findByIdAndUpdate(studentId, {
@@ -53,6 +54,12 @@ export const fulfillZohoPayment = async ({
 
     await finalizePaidPurchase(purchase, sessionId, paymentId);
     await grantCourseAccess(studentId, purchase.course);
+    notifyEnrollmentSuccess({
+      studentId,
+      purchaseType: "course",
+      itemId: purchase.course,
+      amountPaid: purchase.amount,
+    }).catch(() => {});
     return { ok: true, purchaseType: "course", itemId: purchase.course };
   }
 
@@ -64,6 +71,12 @@ export const fulfillZohoPayment = async ({
 
   await finalizePaidPurchase(purchase, sessionId, paymentId);
   await grantWorkshopAccess(studentId, purchase.workshop);
+  notifyEnrollmentSuccess({
+    studentId,
+    purchaseType: "workshop",
+    itemId: purchase.workshop,
+    amountPaid: purchase.amount,
+  }).catch(() => {});
   return { ok: true, purchaseType: "workshop", itemId: purchase.workshop };
 };
 

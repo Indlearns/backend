@@ -77,8 +77,8 @@ httpServer.listen(PORT, () => {
   }
   console.log(
     isEmailConfigured()
-      ? "Email (SMTP): configured — super admin OTP will be emailed"
-      : "Email (SMTP): not configured — super admin OTP logged to console only"
+      ? "Email (SMTP): configured — super admin OTP + enrollment emails enabled"
+      : "Email (SMTP): not configured — add SMTP_* on Render for OTP and enrollment emails"
   );
   console.log("Course images: stored in MongoDB GridFS (persistent across deploys)");
 });

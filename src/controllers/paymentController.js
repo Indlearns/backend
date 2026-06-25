@@ -27,6 +27,7 @@ import {
   validateReferralForItem,
   incrementReferralUsage,
 } from "../utils/referralCode.js";
+import { notifyEnrollmentSuccess } from "../utils/enrollmentEmail.js";
 
 const grantCourseAccess = async (studentId, courseId) => {
   await User.findByIdAndUpdate(studentId, {
@@ -38,6 +39,15 @@ const grantWorkshopAccess = async (studentId, workshopId) => {
   await User.findByIdAndUpdate(studentId, {
     $addToSet: { registeredWorkshops: workshopId },
   });
+};
+
+const completeEnrollment = async (studentId, purchaseType, itemId, amountPaid = 0) => {
+  if (purchaseType === "course") {
+    await grantCourseAccess(studentId, itemId);
+  } else {
+    await grantWorkshopAccess(studentId, itemId);
+  }
+  notifyEnrollmentSuccess({ studentId, purchaseType, itemId, amountPaid }).catch(() => {});
 };
 
 const hasCourseAccess = async (student, courseId) => {
@@ -289,7 +299,7 @@ export const createCourseOrder = async (req, res) => {
         },
         { upsert: true, new: true }
       );
-      await grantCourseAccess(req.user._id, course._id);
+      await completeEnrollment(req.user._id, "course", course._id, 0);
       return res.json({
         success: true,
         data: { free: true, message: "Course enrolled for free." },
@@ -322,7 +332,7 @@ export const createCourseOrder = async (req, res) => {
       if (referralMeta.referralCodeId) {
         await incrementReferralUsage(referralMeta.referralCodeId);
       }
-      await grantCourseAccess(req.user._id, course._id);
+      await completeEnrollment(req.user._id, "course", course._id, pricing.finalAmount);
       return res.json({
         success: true,
         data: {
@@ -399,7 +409,7 @@ export const createWorkshopOrder = async (req, res) => {
         },
         { upsert: true, new: true }
       );
-      await grantWorkshopAccess(req.user._id, workshop._id);
+      await completeEnrollment(req.user._id, "workshop", workshop._id, 0);
       return res.json({
         success: true,
         data: { free: true, message: "Registered for free." },
@@ -432,7 +442,7 @@ export const createWorkshopOrder = async (req, res) => {
       if (referralMeta.referralCodeId) {
         await incrementReferralUsage(referralMeta.referralCodeId);
       }
-      await grantWorkshopAccess(req.user._id, workshop._id);
+      await completeEnrollment(req.user._id, "workshop", workshop._id, pricing.finalAmount);
       return res.json({
         success: true,
         data: {

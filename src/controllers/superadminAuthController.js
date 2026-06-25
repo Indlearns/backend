@@ -66,20 +66,30 @@ export const requestSuperAdminCode = async (req, res) => {
     const devFallback = !isEmailConfigured();
 
     if (devFallback) {
+      const isProduction = process.env.NODE_ENV === "production";
       console.log(`[superadmin OTP] ${superEmail} → ${code} (SMTP not configured)`);
-    } else {
-      await sendSuperAdminLoginCode(superEmail, code);
+
+      if (isProduction) {
+        return res.status(503).json({
+          success: false,
+          message:
+            "Email service is not configured on the server. Add SMTP settings on Render, then redeploy.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Login code generated for local development (SMTP not configured).",
+        devCode: code,
+        note: "Configure SMTP for production — codes will be emailed only.",
+      });
     }
+
+    await sendSuperAdminLoginCode(superEmail, code);
 
     res.json({
       success: true,
-      message: devFallback
-        ? "Login code generated (email not configured — see server logs or response in dev)."
-        : `Login code sent to ${superEmail}. Check your inbox.`,
-      ...(devFallback && {
-        devCode: code,
-        note: "Configure SMTP on Render for production email delivery.",
-      }),
+      message: `Login code sent to ${superEmail}. Check your inbox and spam folder.`,
     });
   } catch (error) {
     console.error("requestSuperAdminCode:", error.message);
