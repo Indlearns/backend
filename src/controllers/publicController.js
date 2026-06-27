@@ -1,6 +1,7 @@
 import Course from "../models/Course.js";
 import Workshop from "../models/Workshop.js";
 import Company from "../models/Company.js";
+import TutorShowcase from "../models/TutorShowcase.js";
 import {
   buildPublicWorkshopFilter,
   buildAdminWorkshopTypeFilter,
@@ -17,7 +18,7 @@ export const getHome = async (req, res) => {
     const workshopFilter = { ...upcomingFilter, ...buildAdminWorkshopTypeFilter("workshop") };
     const hackathonFilter = { ...upcomingFilter, ...buildAdminWorkshopTypeFilter("hackathon") };
 
-    const [courses, workshops, hackathons, courseCount, workshopCount, hackathonCount] =
+    const [courses, workshops, hackathons, courseCount, workshopCount, hackathonCount, tutorShowcase] =
       await Promise.all([
       Course.find({ status: "published" })
         .select("-createdBy")
@@ -34,6 +35,9 @@ export const getHome = async (req, res) => {
       Course.countDocuments({ status: "published" }),
       Workshop.countDocuments(workshopFilter),
       Workshop.countDocuments(hackathonFilter),
+      TutorShowcase.find({ isActive: true })
+        .select("name experience description imageUrl sortOrder")
+        .sort({ sortOrder: 1, createdAt: -1 }),
     ]);
 
     res.json({
@@ -42,6 +46,7 @@ export const getHome = async (req, res) => {
         courses,
         workshops,
         hackathons,
+        tutorShowcase,
         counts: {
           courses: courseCount,
           workshops: workshopCount,

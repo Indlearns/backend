@@ -62,6 +62,12 @@ import {
   updateJob,
   deleteJob,
 } from "../controllers/admin/jobController.js";
+import {
+  createTutorShowcase,
+  getTutorShowcases,
+  updateTutorShowcase,
+  deleteTutorShowcase,
+} from "../controllers/admin/tutorShowcaseController.js";
 
 const router = express.Router();
 
@@ -116,6 +122,11 @@ router.get("/referral-codes", getReferralCodes);
 router.get("/referral-codes/:id/usages", getReferralCodeUsages);
 router.put("/referral-codes/:id", updateReferralCode);
 router.delete("/referral-codes/:id", deleteReferralCode);
+
+router.post("/tutor-showcase", uploadCourseImage.single("image"), createTutorShowcase);
+router.get("/tutor-showcase", getTutorShowcases);
+router.put("/tutor-showcase/:id", uploadCourseImage.single("image"), updateTutorShowcase);
+router.delete("/tutor-showcase/:id", deleteTutorShowcase);
 
 router.get("/conversations", getConversations);
 router.post("/conversations/:id/join", joinConversation);
