@@ -13,6 +13,14 @@ import {
   joinLiveClass,
 } from "../controllers/chatController.js";
 import {
+  uploadClassRecording,
+  listClassRecordings,
+  deleteClassRecording,
+  getRecordingsForSchedule,
+  getClassRecordingStream,
+} from "../controllers/classRecordingController.js";
+import { uploadClassRecording as uploadClassRecordingMw } from "../middleware/uploadMiddleware.js";
+import {
   getStaffDirectory,
   openBatchConversation,
   startGroupChat,
@@ -51,5 +59,14 @@ router.get("/conversations/:id/video", getVideoConfig);
 router.get("/live-classes", getLiveClasses);
 router.post("/live-classes/:scheduleId/join", joinLiveClass);
 router.get("/live-classes/:scheduleId/video", getLiveClassVideo);
+router.post(
+  "/live-classes/:scheduleId/recordings",
+  uploadClassRecordingMw.single("recording"),
+  uploadClassRecording
+);
+router.get("/live-classes/:scheduleId/recordings", getRecordingsForSchedule);
+router.get("/recordings", listClassRecordings);
+router.get("/recordings/:id/stream", getClassRecordingStream);
+router.delete("/recordings/:id", authorize(ROLES.ADMIN, ROLES.SUPERADMIN), deleteClassRecording);
 
 export default router;

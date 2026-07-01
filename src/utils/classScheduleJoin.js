@@ -3,6 +3,7 @@ import Batch from "../models/Batch.js";
 import { ensureVideoRoomId } from "./videoRoom.js";
 import { getIceServers } from "../config/iceConfig.js";
 import { canJoinClass, syncScheduleParticipants } from "./classAccess.js";
+import { canUploadClassRecording } from "./classRecordingAccess.js";
 
 export const joinLiveClassForUser = async (scheduleId, user) => {
   const schedule = await ClassSchedule.findById(scheduleId).populate("batch");
@@ -37,11 +38,15 @@ export const joinLiveClassForUser = async (scheduleId, user) => {
   }
 
   const roomId = await ensureVideoRoomId(schedule, "class", "_id");
+  const canRecord = await canUploadClassRecording(user, schedule, batch);
 
   return {
     schedule,
+    scheduleId: schedule._id,
+    batchId: batch._id,
     roomId,
     roomName: roomId,
     iceServers: getIceServers(),
+    canRecord,
   };
 };
