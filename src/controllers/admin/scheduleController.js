@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { createVideoRoomId } from "../../utils/videoRoom.js";
 import { buildParticipantsFromBatch } from "../../utils/classAccess.js";
 import { resolveScheduleDates } from "../../utils/scheduleDates.js";
+import { notifyTutorClassAssignment } from "../../utils/enrollmentEmail.js";
 
 const buildScheduleDoc = (batchDoc, userId, fields, dateStr, scheduleGroupId) => {
   const tutorId = fields.tutor || batchDoc.tutor;
@@ -51,7 +52,9 @@ export const createSchedule = async (req, res) => {
       });
     }
 
-    const batchDoc = await Batch.findById(batch);
+    const batchDoc = await Batch.findById(batch)
+      .populate("course", "title")
+      .populate("workshop", "title eventType");
     if (!batchDoc) {
       return res.status(404).json({ success: false, message: "Batch not found." });
     }
@@ -66,9 +69,18 @@ export const createSchedule = async (req, res) => {
     if (docs.length === 1) {
       const schedule = await ClassSchedule.create(docs[0]);
       const populated = await ClassSchedule.findById(schedule._id)
-        .populate("batch", "name")
+        .populate({
+          path: "batch",
+          select: "name course workshop students sourceType",
+          populate: [
+            { path: "course", select: "title" },
+            { path: "workshop", select: "title eventType" },
+          ],
+        })
         .populate("tutor", "name email")
         .populate("participants", "name email role");
+
+      notifyTutorClassAssignment(populated).catch(() => {});
 
       return res.status(201).json({
         success: true,
@@ -80,10 +92,19 @@ export const createSchedule = async (req, res) => {
 
     const created = await ClassSchedule.insertMany(docs);
     const populated = await ClassSchedule.find({ _id: { $in: created.map((c) => c._id) } })
-      .populate("batch", "name")
+      .populate({
+        path: "batch",
+        select: "name course workshop students sourceType",
+        populate: [
+          { path: "course", select: "title" },
+          { path: "workshop", select: "title eventType" },
+        ],
+      })
       .populate("tutor", "name email")
       .populate("participants", "name email role")
       .sort({ date: 1 });
+
+    notifyTutorClassAssignment(populated).catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -102,8 +123,14 @@ export const getSchedules = async (req, res) => {
   if (req.query.batch) filter.batch = req.query.batch;
 
   const schedules = await ClassSchedule.find(filter)
-    .populate("batch", "name course")
-    .populate({ path: "batch", populate: { path: "course", select: "title" } })
+    .populate({
+      path: "batch",
+      select: "name course workshop sourceType",
+      populate: [
+        { path: "course", select: "title" },
+        { path: "workshop", select: "title eventType" },
+      ],
+    })
     .populate("tutor", "name email")
     .populate("participants", "name email role")
     .sort({ date: 1, startTime: 1 });
@@ -116,8 +143,12 @@ export const updateSchedule = async (req, res) => {
     const schedule = await ClassSchedule.findById(req.params.id);
     if (!schedule) return res.status(404).json({ success: false, message: "Class not found." });
 
+    const previousTutor = schedule.tutor ? String(schedule.tutor) : "";
+
     const batchId = req.body.batch || schedule.batch;
-    const batchDoc = await Batch.findById(batchId);
+    const batchDoc = await Batch.findById(batchId)
+      .populate("course", "title")
+      .populate("workshop", "title eventType");
     if (!batchDoc) {
       return res.status(404).json({ success: false, message: "Batch not found." });
     }
@@ -130,9 +161,21 @@ export const updateSchedule = async (req, res) => {
     await schedule.save();
 
     const populated = await ClassSchedule.findById(schedule._id)
-      .populate("batch", "name")
+      .populate({
+        path: "batch",
+        select: "name course workshop students sourceType",
+        populate: [
+          { path: "course", select: "title" },
+          { path: "workshop", select: "title eventType" },
+        ],
+      })
       .populate("tutor", "name email")
       .populate("participants", "name email role");
+
+    const newTutor = populated.tutor ? String(populated.tutor._id || populated.tutor) : "";
+    if (newTutor && newTutor !== previousTutor) {
+      notifyTutorClassAssignment(populated).catch(() => {});
+    }
 
     res.json({ success: true, data: populated });
   } catch (error) {

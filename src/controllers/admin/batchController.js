@@ -4,6 +4,11 @@ import User from "../../models/User.js";
 import { ROLES } from "../../config/roleConfig.js";
 import { createVideoRoomId } from "../../utils/videoRoom.js";
 import { syncBatchEnrollment } from "../../utils/syncEnrollment.js";
+import { syncEnrolledStudentsIntoBatch } from "../../utils/batchStudentSync.js";
+import {
+  notifyTutorBatchAssignment,
+  notifyStudentsAddedToBatch,
+} from "../../utils/enrollmentEmail.js";
 import {
   normalizeBatchSourceType,
   populateBatchSource,
@@ -62,7 +67,17 @@ export const createBatch = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    const syncResult = await syncEnrolledStudentsIntoBatch(batch);
     await syncBatchEnrollment(batch);
+
+    if (tutor) {
+      notifyTutorBatchAssignment(batch, tutor).catch(() => {});
+    }
+    if (syncResult.added > 0 && syncResult.summary) {
+      notifyStudentsAddedToBatch(syncResult.addedStudentIds, syncResult.summary).catch(
+        () => {}
+      );
+    }
 
     const populated = await populateBatchSource(
       Batch.findById(batch._id)
@@ -119,6 +134,8 @@ export const updateBatch = async (req, res) => {
       );
     }
 
+    const previousTutor = batch.tutor ? String(batch.tutor) : "";
+
     if (tutor !== undefined) {
       if (tutor) {
         const tutorUser = await User.findById(tutor);
@@ -132,6 +149,8 @@ export const updateBatch = async (req, res) => {
     if (students !== undefined) batch.students = students;
 
     await batch.save();
+
+    const syncResult = await syncEnrolledStudentsIntoBatch(batch);
 
     const conv = await Conversation.findOne({ batch: batch._id });
     if (conv) {
@@ -149,6 +168,16 @@ export const updateBatch = async (req, res) => {
     }
 
     await syncBatchEnrollment(batch);
+
+    const newTutor = batch.tutor ? String(batch.tutor) : "";
+    if (newTutor && newTutor !== previousTutor) {
+      notifyTutorBatchAssignment(batch, batch.tutor).catch(() => {});
+    }
+    if (syncResult.added > 0 && syncResult.summary) {
+      notifyStudentsAddedToBatch(syncResult.addedStudentIds, syncResult.summary).catch(
+        () => {}
+      );
+    }
 
     const populated = await populateBatchSource(
       Batch.findById(batch._id)

@@ -28,6 +28,7 @@ import {
   incrementReferralUsage,
 } from "../utils/referralCode.js";
 import { notifyEnrollmentSuccess } from "../utils/enrollmentEmail.js";
+import { addStudentToMatchingBatches } from "../utils/batchStudentSync.js";
 
 const grantCourseAccess = async (studentId, courseId) => {
   await User.findByIdAndUpdate(studentId, {
@@ -48,6 +49,15 @@ const completeEnrollment = async (studentId, purchaseType, itemId, amountPaid = 
     await grantWorkshopAccess(studentId, itemId);
   }
   notifyEnrollmentSuccess({ studentId, purchaseType, itemId, amountPaid }).catch(() => {});
+};
+
+/** Ensure existing enrollment is also linked into current batches (no email). */
+const ensureBatchMembership = async (studentId, purchaseType, itemId) => {
+  if (purchaseType === "course") {
+    await addStudentToMatchingBatches(studentId, { courseId: itemId });
+  } else {
+    await addStudentToMatchingBatches(studentId, { workshopId: itemId });
+  }
 };
 
 const hasCourseAccess = async (student, courseId) => {
@@ -280,6 +290,7 @@ export const createCourseOrder = async (req, res) => {
     const alreadyPurchased = await hasCourseAccess(req.user, course._id);
     if (alreadyPurchased) {
       await grantCourseAccess(req.user._id, course._id);
+      await ensureBatchMembership(req.user._id, "course", course._id);
       return res.json({
         success: true,
         message: "You have already purchased this course.",
@@ -390,6 +401,7 @@ export const createWorkshopOrder = async (req, res) => {
     const alreadyRegistered = await hasWorkshopAccess(req.user, workshop._id);
     if (alreadyRegistered) {
       await grantWorkshopAccess(req.user._id, workshop._id);
+      await ensureBatchMembership(req.user._id, "workshop", workshop._id);
       return res.json({
         success: true,
         message: "You are already registered for this event.",
