@@ -57,6 +57,7 @@ export const getStudentById = async (req, res) => {
     const [batches, coursePurchases, workshopPurchases] = await Promise.all([
       Batch.find({ students: student._id })
         .populate("course", "title category")
+        .populate("workshop", "title eventType")
         .populate("tutor", "name email")
         .sort({ updatedAt: -1 }),
       CoursePurchase.find({ student: student._id, status: "paid" })

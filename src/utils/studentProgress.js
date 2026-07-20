@@ -4,7 +4,9 @@ import Submission from "../models/Submission.js";
 import ClassSchedule from "../models/ClassSchedule.js";
 
 export const computeBatchProgress = async (studentId, batchId) => {
-  const batch = await Batch.findById(batchId).populate("course", "title category level");
+  const batch = await Batch.findById(batchId)
+    .populate("course", "title category level")
+    .populate("workshop", "title eventType date");
   if (!batch) return null;
 
   const assignmentIds = await Assignment.find({
@@ -50,7 +52,9 @@ export const computeBatchProgress = async (studentId, batchId) => {
   return {
     batchId: batch._id,
     batchName: batch.name,
+    sourceType: batch.sourceType || (batch.workshop ? "workshop" : "course"),
     course: batch.course,
+    workshop: batch.workshop,
     overallPercent,
     assignmentPct,
     classPct,
@@ -69,6 +73,7 @@ export const computeBatchProgress = async (studentId, batchId) => {
 export const getStudentEnrollments = async (studentId) => {
   const batches = await Batch.find({ students: studentId })
     .populate("course", "title description category level duration thumbnail")
+    .populate("workshop", "title description eventType date startTime endTime")
     .populate("tutor", "name email")
     .sort({ updatedAt: -1 });
 

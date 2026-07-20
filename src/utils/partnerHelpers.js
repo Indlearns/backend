@@ -21,8 +21,9 @@ export const buildStudentProgressPayload = async (studentId) => {
   return {
     enrollments: enrollments.map((e) => ({
       batchName: e.batch?.name,
-      courseTitle: e.batch?.course?.title,
-      courseCategory: e.batch?.course?.category,
+      courseTitle: e.batch?.course?.title || e.batch?.workshop?.title,
+      courseCategory: e.batch?.course?.category || e.batch?.workshop?.eventType,
+      sourceType: e.batch?.sourceType || (e.batch?.workshop ? "workshop" : "course"),
       overallPercent: e.progress?.overallPercent ?? 0,
       assignmentPct: e.progress?.assignmentPct ?? 0,
       classPct: e.progress?.classPct ?? 0,

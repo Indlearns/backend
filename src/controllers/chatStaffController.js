@@ -26,6 +26,7 @@ export const getStaffDirectory = async (req, res) => {
     const [batches, users] = await Promise.all([
       Batch.find()
         .populate("course", "title")
+        .populate("workshop", "title eventType")
         .populate("tutor", "name email role avatar")
         .populate("students", "name email role avatar")
         .sort({ createdAt: -1 }),

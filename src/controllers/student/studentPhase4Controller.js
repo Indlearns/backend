@@ -97,7 +97,9 @@ export const getMyCourses = async (req, res) => {
     const purchases = await CoursePurchase.find({
       student: req.user._id,
       status: "paid",
-    }).populate("course", "title description category duration thumbnail price");
+    })
+      .populate("course", "title description category duration thumbnail price")
+      .populate("workshop", "title description eventType date startTime endTime price");
 
     const batchCourseIds = new Set(
       enrollments.map((e) => String(e.batch?.course?._id || e.batch?.course))
@@ -129,6 +131,7 @@ export const getCourseDashboard = async (req, res) => {
       students: req.user._id,
     })
       .populate("course", "title description category level duration")
+      .populate("workshop", "title description eventType date startTime endTime")
       .populate("tutor", "name email phone");
 
     if (!batch) {
@@ -258,7 +261,8 @@ export const getResumeData = async (req, res) => {
     ];
 
     const learningSection = enrollments.map((e) => ({
-      course: e.batch?.course?.title,
+      course: e.batch?.course?.title || e.batch?.workshop?.title,
+      sourceType: e.batch?.sourceType || (e.batch?.workshop ? "workshop" : "course"),
       batch: e.batch?.name,
       progress: e.progress?.overallPercent,
       milestones: e.progress?.milestones,

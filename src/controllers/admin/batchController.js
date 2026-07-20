@@ -4,15 +4,25 @@ import User from "../../models/User.js";
 import { ROLES } from "../../config/roleConfig.js";
 import { createVideoRoomId } from "../../utils/videoRoom.js";
 import { syncBatchEnrollment } from "../../utils/syncEnrollment.js";
+import {
+  normalizeBatchSourceType,
+  populateBatchSource,
+  resolveBatchSource,
+} from "../../utils/batchSource.js";
 
 export const createBatch = async (req, res) => {
   try {
-    const { name, course, tutor, students, startDate, endDate, maxStudents, status } =
-      req.body;
+    const { name, tutor, students, startDate, endDate, maxStudents, status } = req.body;
 
-    if (!name || !course) {
-      return res.status(400).json({ success: false, message: "Name and course required." });
+    if (!name) {
+      return res.status(400).json({ success: false, message: "Batch name is required." });
     }
+
+    const source = await resolveBatchSource({
+      sourceType: req.body.sourceType,
+      course: req.body.course,
+      workshop: req.body.workshop,
+    });
 
     if (tutor) {
       const tutorUser = await User.findById(tutor);
@@ -23,7 +33,9 @@ export const createBatch = async (req, res) => {
 
     const batch = await Batch.create({
       name,
-      course,
+      sourceType: source.sourceType,
+      course: source.course,
+      workshop: source.workshop,
       tutor: tutor || null,
       students: students || [],
       startDate,
@@ -52,23 +64,25 @@ export const createBatch = async (req, res) => {
 
     await syncBatchEnrollment(batch);
 
-    const populated = await Batch.findById(batch._id)
-      .populate("course", "title")
-      .populate("tutor", "name email")
-      .populate("students", "name email");
+    const populated = await populateBatchSource(
+      Batch.findById(batch._id)
+        .populate("tutor", "name email")
+        .populate("students", "name email")
+    );
 
     res.status(201).json({ success: true, data: populated });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(error.status || 400).json({ success: false, message: error.message });
   }
 };
 
 export const getBatches = async (req, res) => {
-  const batches = await Batch.find()
-    .populate("course", "title")
-    .populate("tutor", "name email")
-    .populate("students", "name email")
-    .sort({ createdAt: -1 });
+  const batches = await populateBatchSource(
+    Batch.find()
+      .populate("tutor", "name email")
+      .populate("students", "name email")
+      .sort({ createdAt: -1 })
+  );
   res.json({ success: true, count: batches.length, data: batches });
 };
 
@@ -77,14 +91,33 @@ export const updateBatch = async (req, res) => {
     const batch = await Batch.findById(req.params.id);
     if (!batch) return res.status(404).json({ success: false, message: "Batch not found." });
 
-    const { tutor, students, name, course, startDate, endDate, maxStudents, status } = req.body;
+    const { tutor, students, name, startDate, endDate, maxStudents, status } = req.body;
 
     if (name !== undefined) batch.name = name;
-    if (course !== undefined) batch.course = course;
     if (startDate !== undefined) batch.startDate = startDate || null;
     if (endDate !== undefined) batch.endDate = endDate || null;
     if (maxStudents !== undefined) batch.maxStudents = maxStudents;
     if (status !== undefined) batch.status = status;
+
+    const sourceChanging =
+      req.body.sourceType !== undefined ||
+      req.body.course !== undefined ||
+      req.body.workshop !== undefined;
+
+    if (sourceChanging) {
+      const source = await resolveBatchSource({
+        sourceType: req.body.sourceType ?? batch.sourceType,
+        course: req.body.course !== undefined ? req.body.course : batch.course,
+        workshop: req.body.workshop !== undefined ? req.body.workshop : batch.workshop,
+      });
+      batch.sourceType = source.sourceType;
+      batch.course = source.course;
+      batch.workshop = source.workshop;
+    } else if (!batch.sourceType) {
+      batch.sourceType = normalizeBatchSourceType(
+        batch.workshop ? "workshop" : "course"
+      );
+    }
 
     if (tutor !== undefined) {
       if (tutor) {
@@ -117,14 +150,15 @@ export const updateBatch = async (req, res) => {
 
     await syncBatchEnrollment(batch);
 
-    const populated = await Batch.findById(batch._id)
-      .populate("course", "title")
-      .populate("tutor", "name email")
-      .populate("students", "name email");
+    const populated = await populateBatchSource(
+      Batch.findById(batch._id)
+        .populate("tutor", "name email")
+        .populate("students", "name email")
+    );
 
     res.json({ success: true, data: populated });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    res.status(error.status || 400).json({ success: false, message: error.message });
   }
 };
 

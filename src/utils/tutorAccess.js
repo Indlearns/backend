@@ -5,6 +5,7 @@ import ClassSchedule from "../models/ClassSchedule.js";
 export const getTutorBatches = (tutorId) =>
   Batch.find({ tutor: tutorId })
     .populate("course", "title")
+    .populate("workshop", "title eventType")
     .populate("students", "name email")
     .sort({ createdAt: -1 });
 
