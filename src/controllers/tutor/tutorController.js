@@ -14,6 +14,7 @@ import {
 import { createVideoRoomId, ensureVideoRoomId } from "../../utils/videoRoom.js";
 import { joinLiveClassForUser } from "../../utils/classScheduleJoin.js";
 import { syncScheduleParticipants } from "../../utils/classAccess.js";
+import { buildLiveClassListFilter } from "../../utils/classScheduleQuery.js";
 import { ROLES } from "../../config/roleConfig.js";
 
 export const getDashboard = async (req, res) => {
@@ -58,20 +59,18 @@ export const getMyBatches = async (req, res) => {
 
 export const getMyClasses = async (req, res) => {
   try {
-    const batches = await Batch.find({ tutor: req.user._id }).select("_id");
-    const batchIds = batches.map((b) => b._id);
-
-    const filter = {
-      $or: [{ tutor: req.user._id }, { participants: req.user._id }, { batch: { $in: batchIds } }],
-    };
-    if (req.query.upcoming === "true") {
-      filter.date = { $gte: new Date(new Date().setHours(0, 0, 0, 0)) };
-      filter.status = { $in: ["scheduled", "live"] };
-    }
+    const filter = await buildLiveClassListFilter(req.user);
 
     const schedules = await ClassSchedule.find(filter)
-      .populate("batch", "name")
-      .populate({ path: "batch", populate: { path: "course", select: "title" } })
+      .populate({
+        path: "batch",
+        select: "name course workshop sourceType",
+        populate: [
+          { path: "course", select: "title" },
+          { path: "workshop", select: "title eventType" },
+        ],
+      })
+      .populate("tutor", "name email")
       .sort({ date: 1, startTime: 1 });
 
     for (const s of schedules) {

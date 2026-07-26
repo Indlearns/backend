@@ -9,6 +9,7 @@ import { createVideoRoomId, ensureVideoRoomId } from "../utils/videoRoom.js";
 import { getIceServers } from "../config/iceConfig.js";
 import { syncScheduleParticipants } from "../utils/classAccess.js";
 import { joinLiveClassForUser } from "../utils/classScheduleJoin.js";
+import { buildLiveClassListFilter } from "../utils/classScheduleQuery.js";
 
 const populateConv = (q) =>
   q.populate("batch", "name").populate("participants", "name email role");
@@ -165,23 +166,17 @@ export const getVideoConfig = async (req, res) => {
 /** Live classes — role-based listing */
 export const getLiveClasses = async (req, res) => {
   try {
-    const today = new Date(new Date().setHours(0, 0, 0, 0));
-    let filter = {
-      date: { $gte: today },
-      status: { $in: ["scheduled", "live"] },
-    };
-
-    if (req.user.role === ROLES.TUTOR) {
-      filter.$or = [{ tutor: req.user._id }, { participants: req.user._id }];
-    } else if ([ROLES.ADMIN, ROLES.SUPERADMIN].includes(req.user.role)) {
-      // staff sees all upcoming / live classes
-    } else if (req.user.role === ROLES.STUDENT) {
-      filter.participants = req.user._id;
-    }
+    const filter = await buildLiveClassListFilter(req.user);
 
     const schedules = await ClassSchedule.find(filter)
-      .populate("batch", "name course")
-      .populate({ path: "batch", populate: { path: "course", select: "title" } })
+      .populate("batch", "name course workshop sourceType")
+      .populate({
+        path: "batch",
+        populate: [
+          { path: "course", select: "title" },
+          { path: "workshop", select: "title eventType" },
+        ],
+      })
       .populate("tutor", "name email")
       .populate("participants", "name email role")
       .sort({ date: 1, startTime: 1 });
