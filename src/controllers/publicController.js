@@ -1,6 +1,7 @@
 import Course from "../models/Course.js";
 import Workshop from "../models/Workshop.js";
 import Company from "../models/Company.js";
+import JobListing from "../models/JobListing.js";
 import TutorShowcase from "../models/TutorShowcase.js";
 import {
   buildPublicWorkshopFilter,
@@ -112,6 +113,17 @@ export const getCompanies = async (req, res) => {
   try {
     const companies = await Company.find({ isActive: true }).sort({ name: 1 });
     res.json({ success: true, count: companies.length, data: companies });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getPublicJobs = async (req, res) => {
+  try {
+    const jobs = await JobListing.find({ audience: "public", isActive: true })
+      .select("title company description location jobType skills applyLink createdAt")
+      .sort({ createdAt: -1 });
+    res.json({ success: true, count: jobs.length, data: jobs });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

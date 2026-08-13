@@ -15,6 +15,12 @@ const jobListingSchema = new mongoose.Schema(
     skills: [{ type: String, trim: true }],
     courseCategories: [{ type: String, trim: true }],
     applyLink: { type: String, default: "" },
+    /** student = enrolled career portal; public = open listings on the public site */
+    audience: {
+      type: String,
+      enum: ["student", "public"],
+      default: "student",
+    },
     isActive: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },

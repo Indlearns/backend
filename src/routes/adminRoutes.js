@@ -65,6 +65,12 @@ import {
   deleteJob,
 } from "../controllers/admin/jobController.js";
 import {
+  createPublicJob,
+  getPublicJobsAdmin,
+  updatePublicJob,
+  deletePublicJob,
+} from "../controllers/admin/publicJobController.js";
+import {
   createTutorShowcase,
   getTutorShowcases,
   updateTutorShowcase,
@@ -119,6 +125,11 @@ router.post("/jobs", createJob);
 router.get("/jobs", getJobs);
 router.put("/jobs/:id", updateJob);
 router.delete("/jobs/:id", deleteJob);
+
+router.post("/public-jobs", createPublicJob);
+router.get("/public-jobs", getPublicJobsAdmin);
+router.put("/public-jobs/:id", updatePublicJob);
+router.delete("/public-jobs/:id", deletePublicJob);
 
 router.post("/referral-codes", createReferralCode);
 router.get("/referral-codes/usages", getAllReferralUsages);

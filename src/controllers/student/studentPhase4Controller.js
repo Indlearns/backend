@@ -297,6 +297,7 @@ const seedDefaultJobs = async () => {
       skills: ["JavaScript", "React", "Node.js"],
       courseCategories: ["Web Development", "General"],
       applyLink: "https://example.com/apply",
+      audience: "student",
     },
     {
       title: "Frontend Intern",
@@ -307,6 +308,7 @@ const seedDefaultJobs = async () => {
       skills: ["HTML", "CSS", "React"],
       courseCategories: ["Web Development"],
       applyLink: "https://example.com/intern",
+      audience: "student",
     },
     {
       title: "Full Stack Engineer",
@@ -317,6 +319,7 @@ const seedDefaultJobs = async () => {
       skills: ["MongoDB", "Express", "React"],
       courseCategories: ["Web Development", "Programming"],
       applyLink: "https://example.com/fullstack",
+      audience: "student",
     },
   ]);
 };
@@ -339,7 +342,10 @@ export const getCareerJobs = async (req, res) => {
       ),
     ];
 
-    let jobs = await JobListing.find({ isActive: true }).sort({ createdAt: -1 });
+    let jobs = await JobListing.find({
+      isActive: true,
+      audience: { $ne: "public" },
+    }).sort({ createdAt: -1 });
 
     if (categories.length > 0) {
       const matched = jobs.filter(
