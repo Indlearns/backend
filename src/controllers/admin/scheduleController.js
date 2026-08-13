@@ -3,7 +3,7 @@ import Batch from "../../models/Batch.js";
 import crypto from "crypto";
 import { createVideoRoomId } from "../../utils/videoRoom.js";
 import { buildParticipantsFromBatch } from "../../utils/classAccess.js";
-import { resolveScheduleDates } from "../../utils/scheduleDates.js";
+import { resolveScheduleDates, toScheduleDate } from "../../utils/scheduleDates.js";
 import { notifyTutorClassAssignment } from "../../utils/enrollmentEmail.js";
 
 const buildScheduleDoc = (batchDoc, userId, fields, dateStr, scheduleGroupId) => {
@@ -13,7 +13,7 @@ const buildScheduleDoc = (batchDoc, userId, fields, dateStr, scheduleGroupId) =>
   return {
     batch: batchDoc._id,
     title: fields.title,
-    date: dateStr,
+    date: toScheduleDate(dateStr),
     startTime: fields.startTime,
     endTime: fields.endTime,
     meetLink: fields.meetLink || "",
@@ -154,6 +154,9 @@ export const updateSchedule = async (req, res) => {
     }
 
     Object.assign(schedule, req.body);
+    if (req.body.date !== undefined) {
+      schedule.date = toScheduleDate(req.body.date);
+    }
     schedule.participants = buildParticipantsFromBatch(batchDoc, [
       schedule.createdBy,
       schedule.tutor,

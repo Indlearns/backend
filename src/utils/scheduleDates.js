@@ -1,3 +1,10 @@
+/** Store class date at UTC noon so day-based queries stay stable across timezones */
+export const toScheduleDate = (dateStr) => {
+  const [y, m, d] = String(dateStr).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return new Date(dateStr);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
+};
+
 /** Expand from–to range into YYYY-MM-DD strings for selected weekdays (0=Sun … 6=Sat) */
 export const parseLocalDate = (dateStr) => {
   const [y, m, d] = String(dateStr).slice(0, 10).split("-").map(Number);

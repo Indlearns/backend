@@ -9,7 +9,6 @@ import {
   sendTutorClassAssignmentEmail,
   sendTutorBatchAssignmentEmail,
 } from "./sendEmail.js";
-import { addStudentToMatchingBatches } from "./batchStudentSync.js";
 import { getBatchSourceLabel, getBatchSourceTitle } from "./batchSource.js";
 import { getClientUrl } from "../config/clientUrl.js";
 
@@ -45,8 +44,7 @@ const formatDateLabel = (d) => {
 };
 
 /**
- * After enrollment: add student to matching batches/classes, then email
- * with batch + upcoming class details.
+ * Send enrollment confirmation email (no automatic batch assignment).
  */
 export const notifyEnrollmentSuccess = async ({
   studentId,
@@ -55,25 +53,17 @@ export const notifyEnrollmentSuccess = async ({
   amountPaid = 0,
 }) => {
   try {
-    const { itemType, itemTitle, courseId, workshopId } = await resolveItemDetails(
-      purchaseType,
-      itemId
-    );
-
-    const batches = await addStudentToMatchingBatches(studentId, {
-      courseId,
-      workshopId,
-    });
+    const { itemType, itemTitle } = await resolveItemDetails(purchaseType, itemId);
 
     if (!isEmailConfigured()) {
       console.log(
         `[enrollment email] SMTP not configured — skipped for student ${studentId}`
       );
-      return { batches };
+      return;
     }
 
     const student = await User.findById(studentId).select("name email");
-    if (!student?.email?.trim()) return { batches };
+    if (!student?.email?.trim()) return;
 
     await sendEnrollmentSuccessEmail({
       to: student.email,
@@ -81,13 +71,10 @@ export const notifyEnrollmentSuccess = async ({
       itemType,
       itemTitle,
       amountPaid,
-      batches,
+      batches: [],
     });
-
-    return { batches };
   } catch (error) {
     console.error("[enrollment email]", error.message);
-    return { batches: [] };
   }
 };
 

@@ -34,6 +34,8 @@ import {
   getBatches,
   updateBatch,
   deleteBatch,
+  getBatchEligibleStudents,
+  updateBatchStudents,
 } from "../controllers/admin/batchController.js";
 import {
   createSchedule,
@@ -102,6 +104,8 @@ router.delete("/companies/:id", deleteCompany);
 
 router.post("/batches", createBatch);
 router.get("/batches", getBatches);
+router.get("/batches/:id/eligible-students", getBatchEligibleStudents);
+router.put("/batches/:id/students", updateBatchStudents);
 router.put("/batches/:id", updateBatch);
 router.delete("/batches/:id", deleteBatch);
 

@@ -12,40 +12,22 @@ import {
   enrollmentsToCsv,
 } from "../../utils/enrollmentReport.js";
 
-
-
 const parseCourseBody = (body) => {
-
   const price = Number(body.price) || 0;
-
   return {
-
     title: body.title,
-
     description: body.description || "",
-
     category: body.category || "General",
-
     duration: body.duration || "",
-
     enrollmentCloseDate: parseEnrollmentCloseDate(body.enrollmentCloseDate),
-
     status: body.status || "draft",
-
     price,
-
     currency: body.currency || "INR",
-
     isFree: price <= 0,
-
   };
-
 };
 
-
-
 export const createCourse = async (req, res) => {
-
   try {
 
     const data = parseCourseBody(req.body);
@@ -76,15 +58,22 @@ export const createCourse = async (req, res) => {
 
 
 export const getCourses = async (req, res) => {
-
   const courses = await Course.find()
-
     .populate("createdBy", "name email")
-
     .sort({ createdAt: -1 });
 
-  res.json({ success: true, count: courses.length, data: courses });
+  const counts = await CoursePurchase.aggregate([
+    { $match: { status: "paid" } },
+    { $group: { _id: "$course", count: { $sum: 1 } } },
+  ]);
+  const countMap = Object.fromEntries(counts.map((c) => [String(c._id), c.count]));
 
+  const data = courses.map((course) => ({
+    ...course.toObject(),
+    enrollmentCount: countMap[String(course._id)] || 0,
+  }));
+
+  res.json({ success: true, count: data.length, data });
 };
 
 
@@ -220,9 +209,19 @@ export const exportCourseEnrollments = async (req, res) => {
       .filter((p) => p.student)
       .map((p) => formatEnrollmentRow(p, course));
 
-    const csv = enrollmentsToCsv(enrollments);
+    const monthFilter = req.query.month;
+    const filtered = monthFilter
+      ? enrollments.filter((row) => {
+          const d = new Date(row.enrolledAt);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          return key === monthFilter;
+        })
+      : enrollments;
+
+    const csv = enrollmentsToCsv(filtered);
     const safeTitle = course.title.replace(/[^a-z0-9-_]+/gi, "_").slice(0, 40);
-    const filename = `${safeTitle}_enrollments_${new Date().toISOString().slice(0, 10)}.csv`;
+    const monthSuffix = monthFilter ? `_${monthFilter}` : "";
+    const filename = `${safeTitle}_enrollments${monthSuffix}_${new Date().toISOString().slice(0, 10)}.csv`;
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);

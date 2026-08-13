@@ -2,14 +2,21 @@ import Batch from "../models/Batch.js";
 import { ROLES } from "../config/roleConfig.js";
 import { isStaffAdmin } from "./classAccess.js";
 
-/** Upcoming / live classes — includes live sessions even if date is in the past */
+/** Start of yesterday UTC — keeps today's classes visible in all timezones */
+export const classListCutoffDate = () => {
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - 1);
+  cutoff.setUTCHours(0, 0, 0, 0);
+  return cutoff;
+};
+
+/** Upcoming / live classes — live sessions always shown; scheduled from yesterday onward */
 export const buildUpcomingClassTimeFilter = () => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const cutoff = classListCutoffDate();
 
   return {
     status: { $in: ["scheduled", "live"] },
-    $or: [{ status: "live" }, { date: { $gte: today } }],
+    $or: [{ status: "live" }, { date: { $gte: cutoff } }],
   };
 };
 
@@ -33,7 +40,7 @@ export const buildLiveClassAccessFilter = async (user) => {
     const batchIds = batches.map((b) => b._id);
     const or = [{ participants: user._id }];
     if (batchIds.length) or.push({ batch: { $in: batchIds } });
-    return { $or: or };
+    return or.length ? { $or: or } : { _id: null };
   }
 
   return { _id: null };

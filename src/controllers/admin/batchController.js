@@ -3,12 +3,11 @@ import Conversation from "../../models/Conversation.js";
 import User from "../../models/User.js";
 import { ROLES } from "../../config/roleConfig.js";
 import { createVideoRoomId } from "../../utils/videoRoom.js";
-import { syncBatchEnrollment } from "../../utils/syncEnrollment.js";
-import { syncEnrolledStudentsIntoBatch } from "../../utils/batchStudentSync.js";
 import {
-  notifyTutorBatchAssignment,
-  notifyStudentsAddedToBatch,
-} from "../../utils/enrollmentEmail.js";
+  applyBatchStudentList,
+  getEligibleStudentsForBatch,
+} from "../../utils/batchStudentSync.js";
+import { notifyTutorBatchAssignment } from "../../utils/enrollmentEmail.js";
 import {
   normalizeBatchSourceType,
   populateBatchSource,
@@ -36,13 +35,15 @@ export const createBatch = async (req, res) => {
       }
     }
 
+    const studentList = Array.isArray(students) ? students : [];
+
     const batch = await Batch.create({
       name,
       sourceType: source.sourceType,
       course: source.course,
       workshop: source.workshop,
       tutor: tutor || null,
-      students: students || [],
+      students: studentList,
       startDate,
       endDate,
       maxStudents,
@@ -53,7 +54,7 @@ export const createBatch = async (req, res) => {
     const participantIds = [
       req.user._id,
       ...(tutor ? [tutor] : []),
-      ...(students || []),
+      ...studentList,
     ];
     const uniqueParticipants = [
       ...new Map(participantIds.map((id) => [String(id), id])).values(),
@@ -67,16 +68,10 @@ export const createBatch = async (req, res) => {
       createdBy: req.user._id,
     });
 
-    const syncResult = await syncEnrolledStudentsIntoBatch(batch);
-    await syncBatchEnrollment(batch);
+    await applyBatchStudentList(batch);
 
     if (tutor) {
       notifyTutorBatchAssignment(batch, tutor).catch(() => {});
-    }
-    if (syncResult.added > 0 && syncResult.summary) {
-      notifyStudentsAddedToBatch(syncResult.addedStudentIds, syncResult.summary).catch(
-        () => {}
-      );
     }
 
     const populated = await populateBatchSource(
@@ -99,6 +94,56 @@ export const getBatches = async (req, res) => {
       .sort({ createdAt: -1 })
   );
   res.json({ success: true, count: batches.length, data: batches });
+};
+
+export const getBatchEligibleStudents = async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.id);
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found." });
+    }
+
+    const eligible = await getEligibleStudentsForBatch(batch);
+    const inBatch = new Set((batch.students || []).map(String));
+
+    res.json({
+      success: true,
+      data: eligible.map((s) => ({
+        ...s.toObject(),
+        inBatch: inBatch.has(String(s._id)),
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateBatchStudents = async (req, res) => {
+  try {
+    const batch = await Batch.findById(req.params.id);
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found." });
+    }
+
+    const { students } = req.body;
+    if (!Array.isArray(students)) {
+      return res.status(400).json({ success: false, message: "students array is required." });
+    }
+
+    batch.students = students;
+    await batch.save();
+    await applyBatchStudentList(batch);
+
+    const populated = await populateBatchSource(
+      Batch.findById(batch._id)
+        .populate("tutor", "name email")
+        .populate("students", "name email phone")
+    );
+
+    res.json({ success: true, data: populated });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
 };
 
 export const updateBatch = async (req, res) => {
@@ -150,7 +195,7 @@ export const updateBatch = async (req, res) => {
 
     await batch.save();
 
-    const syncResult = await syncEnrolledStudentsIntoBatch(batch);
+    await applyBatchStudentList(batch);
 
     const conv = await Conversation.findOne({ batch: batch._id });
     if (conv) {
@@ -167,22 +212,15 @@ export const updateBatch = async (req, res) => {
       await conv.save();
     }
 
-    await syncBatchEnrollment(batch);
-
     const newTutor = batch.tutor ? String(batch.tutor) : "";
     if (newTutor && newTutor !== previousTutor) {
       notifyTutorBatchAssignment(batch, batch.tutor).catch(() => {});
-    }
-    if (syncResult.added > 0 && syncResult.summary) {
-      notifyStudentsAddedToBatch(syncResult.addedStudentIds, syncResult.summary).catch(
-        () => {}
-      );
     }
 
     const populated = await populateBatchSource(
       Batch.findById(batch._id)
         .populate("tutor", "name email")
-        .populate("students", "name email")
+        .populate("students", "name email phone")
     );
 
     res.json({ success: true, data: populated });
