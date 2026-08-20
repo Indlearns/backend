@@ -7,6 +7,7 @@ import {
   activePublicJobFilter,
   purgeExpiredPublicJobs,
 } from "../utils/publicJobExpiry.js";
+import { buildPublicJobKeywordFilter } from "../utils/publicJobSearch.js";
 import {
   buildPublicWorkshopFilter,
   buildAdminWorkshopTypeFilter,
@@ -125,7 +126,12 @@ export const getCompanies = async (req, res) => {
 export const getPublicJobs = async (req, res) => {
   try {
     await purgeExpiredPublicJobs();
-    const jobs = await JobListing.find(activePublicJobFilter())
+
+    const filter = { ...activePublicJobFilter() };
+    const keywordFilter = buildPublicJobKeywordFilter(req.query.q);
+    if (keywordFilter) Object.assign(filter, keywordFilter);
+
+    const jobs = await JobListing.find(filter)
       .select("title company description location jobType skills applyLink createdAt")
       .sort({ createdAt: -1 });
     res.json({ success: true, count: jobs.length, data: jobs });
