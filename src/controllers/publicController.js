@@ -4,6 +4,10 @@ import Company from "../models/Company.js";
 import JobListing from "../models/JobListing.js";
 import TutorShowcase from "../models/TutorShowcase.js";
 import {
+  activePublicJobFilter,
+  purgeExpiredPublicJobs,
+} from "../utils/publicJobExpiry.js";
+import {
   buildPublicWorkshopFilter,
   buildAdminWorkshopTypeFilter,
   startOfToday,
@@ -120,7 +124,8 @@ export const getCompanies = async (req, res) => {
 
 export const getPublicJobs = async (req, res) => {
   try {
-    const jobs = await JobListing.find({ audience: "public", isActive: true })
+    await purgeExpiredPublicJobs();
+    const jobs = await JobListing.find(activePublicJobFilter())
       .select("title company description location jobType skills applyLink createdAt")
       .sort({ createdAt: -1 });
     res.json({ success: true, count: jobs.length, data: jobs });

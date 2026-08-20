@@ -8,6 +8,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import connectDB from "./config/db.js";
 import { seedSuperAdmin } from "./scripts/seedAdmins.js";
+import { purgeExpiredPublicJobs } from "./utils/publicJobExpiry.js";
 import apiRoutes from "./routes/index.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { initSocket } from "./socket/index.js";
@@ -32,7 +33,18 @@ initSocket(io);
 
 // Connect to MongoDB Atlas, then ensure super admin exists
 connectDB()
-  .then(() => seedSuperAdmin())
+  .then(async () => {
+    await seedSuperAdmin();
+    const removed = await purgeExpiredPublicJobs();
+    if (removed > 0) {
+      console.log(`Public jobs: removed ${removed} expired listing(s)`);
+    }
+    setInterval(() => {
+      purgeExpiredPublicJobs().catch((err) =>
+        console.error("Public job expiry cleanup failed:", err.message)
+      );
+    }, 6 * 60 * 60 * 1000);
+  })
   .catch((err) => console.error("Startup error:", err.message));
 
 // Middleware

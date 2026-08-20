@@ -5,6 +5,10 @@ import {
   buildPublicWorkshopFilter,
   isHackathonEventType,
 } from "./workshopVisibility.js";
+import {
+  activePublicJobFilter,
+  purgeExpiredPublicJobs,
+} from "./publicJobExpiry.js";
 
 const escapeXml = (value) =>
   String(value ?? "")
@@ -58,11 +62,13 @@ export const collectSitemapUrls = async (siteUrl = getSiteBaseUrl()) => {
   const today = formatLastMod(new Date());
   const urls = [];
 
+  await purgeExpiredPublicJobs();
+
   const [courses, workshops, hackathons, publicJobCount] = await Promise.all([
     Course.find({ status: "published" }).select("_id updatedAt").sort({ updatedAt: -1 }),
     Workshop.find(buildPublicWorkshopFilter("workshop")).select("_id updatedAt eventType").sort({ date: 1 }),
     Workshop.find(buildPublicWorkshopFilter("hackathon")).select("_id updatedAt eventType").sort({ date: 1 }),
-    JobListing.countDocuments({ audience: "public", isActive: true }),
+    JobListing.countDocuments(activePublicJobFilter()),
   ]);
 
   const visibleWorkshops = workshops.filter((w) => !isHackathonEventType(w.eventType));

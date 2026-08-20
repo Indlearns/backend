@@ -1,4 +1,11 @@
 import JobListing from "../../models/JobListing.js";
+import {
+  PUBLIC_JOB_TTL_DAYS,
+  activePublicJobFilter,
+  daysUntilPublicJobExpiry,
+  purgeExpiredPublicJobs,
+  publicJobWithinTtlFilter,
+} from "../../utils/publicJobExpiry.js";
 
 const parseSkills = (skills) => {
   if (Array.isArray(skills)) return skills.map((s) => String(s).trim()).filter(Boolean);
@@ -43,8 +50,15 @@ export const createPublicJob = async (req, res) => {
 };
 
 export const getPublicJobsAdmin = async (req, res) => {
-  const jobs = await JobListing.find({ audience: "public" }).sort({ createdAt: -1 });
-  res.json({ success: true, count: jobs.length, data: jobs });
+  await purgeExpiredPublicJobs();
+  const jobs = await JobListing.find(publicJobWithinTtlFilter())
+    .sort({ createdAt: -1 })
+    .lean();
+  const data = jobs.map((job) => ({
+    ...job,
+    daysRemaining: daysUntilPublicJobExpiry(job.createdAt),
+  }));
+  res.json({ success: true, count: data.length, data });
 };
 
 export const updatePublicJob = async (req, res) => {
