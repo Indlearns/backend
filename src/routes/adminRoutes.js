@@ -76,6 +76,13 @@ import {
   updateTutorShowcase,
   deleteTutorShowcase,
 } from "../controllers/admin/tutorShowcaseController.js";
+import {
+  getAffiliatesAdmin,
+  getAffiliateByIdAdmin,
+  getAffiliateWithdrawalsAdmin,
+  completeAffiliateWithdrawal,
+  toggleAffiliateActive,
+} from "../controllers/admin/affiliateController.js";
 
 const router = express.Router();
 
@@ -147,5 +154,11 @@ router.get("/conversations", getConversations);
 router.post("/conversations/:id/join", joinConversation);
 router.get("/conversations/:id/messages", getMessages);
 router.post("/conversations/:id/messages", sendMessage);
+
+router.get("/affiliates", getAffiliatesAdmin);
+router.get("/affiliates/withdrawals", getAffiliateWithdrawalsAdmin);
+router.get("/affiliates/:id", getAffiliateByIdAdmin);
+router.patch("/affiliates/:id/toggle-active", toggleAffiliateActive);
+router.patch("/affiliates/withdrawals/:id/complete", completeAffiliateWithdrawal);
 
 export default router;

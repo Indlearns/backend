@@ -1,3 +1,5 @@
+import Course from "../models/Course.js";
+import Workshop from "../models/Workshop.js";
 import CoursePurchase from "../models/CoursePurchase.js";
 import WorkshopPurchase from "../models/WorkshopPurchase.js";
 import User from "../models/User.js";
@@ -7,6 +9,10 @@ import {
 } from "./paymentPurchase.js";
 import { incrementReferralUsage } from "./referralCode.js";
 import { notifyEnrollmentSuccess } from "./enrollmentEmail.js";
+import {
+  loadProductTitle,
+  recordAffiliateCommission,
+} from "./affiliateFulfillment.js";
 
 const grantCourseAccess = async (studentId, courseId) => {
   await User.findByIdAndUpdate(studentId, {
@@ -17,6 +23,26 @@ const grantCourseAccess = async (studentId, courseId) => {
 const grantWorkshopAccess = async (studentId, workshopId) => {
   await User.findByIdAndUpdate(studentId, {
     $addToSet: { registeredWorkshops: workshopId },
+  });
+};
+
+const creditAffiliateForCourse = async (purchase) => {
+  const title = await loadProductTitle("course", purchase.course, Course);
+  await recordAffiliateCommission({
+    purchase,
+    purchaseType: "course",
+    productTitle: title,
+    productId: purchase.course,
+  });
+};
+
+const creditAffiliateForWorkshop = async (purchase) => {
+  const title = await loadProductTitle("workshop", purchase.workshop, Workshop);
+  await recordAffiliateCommission({
+    purchase,
+    purchaseType: "workshop",
+    productTitle: title,
+    productId: purchase.workshop,
   });
 };
 
@@ -49,11 +75,13 @@ export const fulfillZohoPayment = async ({
     const purchase = await findCoursePurchaseForVerify(studentId, sessionId, itemId);
     if (!purchase) return { ok: false, reason: "purchase_not_found" };
     if (purchase.status === "paid") {
+      await creditAffiliateForCourse(purchase);
       return { ok: true, alreadyPaid: true, purchaseType: "course", itemId: purchase.course };
     }
 
     await finalizePaidPurchase(purchase, sessionId, paymentId);
     await grantCourseAccess(studentId, purchase.course);
+    await creditAffiliateForCourse(purchase);
     notifyEnrollmentSuccess({
       studentId,
       purchaseType: "course",
@@ -66,11 +94,13 @@ export const fulfillZohoPayment = async ({
   const purchase = await findWorkshopPurchaseForVerify(studentId, sessionId, itemId);
   if (!purchase) return { ok: false, reason: "purchase_not_found" };
   if (purchase.status === "paid") {
+    await creditAffiliateForWorkshop(purchase);
     return { ok: true, alreadyPaid: true, purchaseType: "workshop", itemId: purchase.workshop };
   }
 
   await finalizePaidPurchase(purchase, sessionId, paymentId);
   await grantWorkshopAccess(studentId, purchase.workshop);
+  await creditAffiliateForWorkshop(purchase);
   notifyEnrollmentSuccess({
     studentId,
     purchaseType: "workshop",
@@ -93,5 +123,14 @@ export const markZohoPaymentFailed = async ({ sessionId, studentId, itemId, purc
   if (purchase && purchase.status === "pending") {
     purchase.status = "failed";
     await purchase.save();
+  }
+};
+
+/** Credit affiliate after free/referral enrollment of a paid product */
+export const fulfillAffiliateOnEnrollment = async (purchase, purchaseType) => {
+  if (purchaseType === "course") {
+    await creditAffiliateForCourse(purchase);
+  } else {
+    await creditAffiliateForWorkshop(purchase);
   }
 };

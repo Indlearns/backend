@@ -1,16 +1,16 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Affiliate from "../models/Affiliate.js";
+
+const AFFILIATE_ROLE = "affiliate";
 
 /**
- * Protect routes - user must be logged in with valid JWT
+ * Protect routes - user or affiliate must be logged in with valid JWT
  */
 export const protect = async (req, res, next) => {
   let token;
 
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
+  if (req.headers.authorization?.startsWith("Bearer")) {
     token = req.headers.authorization.split(" ")[1];
   } else if (req.cookies?.token) {
     token = req.cookies.token;
@@ -25,7 +25,13 @@ export const protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select("-password");
+
+    if (decoded.role === AFFILIATE_ROLE) {
+      req.user = await Affiliate.findById(decoded.id).select("-password");
+      if (req.user) req.user.role = AFFILIATE_ROLE;
+    } else {
+      req.user = await User.findById(decoded.id).select("-password");
+    }
 
     if (!req.user || !req.user.isActive) {
       return res.status(401).json({
@@ -43,10 +49,6 @@ export const protect = async (req, res, next) => {
   }
 };
 
-/**
- * Restrict routes to specific roles (admin, tutor, student)
- * Usage: authorize("admin") or authorize("admin", "tutor")
- */
 export const authorize =
   (...roles) =>
   (req, res, next) => {
@@ -58,3 +60,5 @@ export const authorize =
     }
     next();
   };
+
+export const affiliateAuth = [protect, authorize(AFFILIATE_ROLE)];

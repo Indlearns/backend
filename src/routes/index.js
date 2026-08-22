@@ -8,6 +8,7 @@ import studentRoutes from "./studentRoutes.js";
 import publicRoutes from "./publicRoutes.js";
 import paymentRoutes from "./paymentRoutes.js";
 import partnerRoutes from "./partnerRoutes.js";
+import affiliateRoutes from "./affiliateRoutes.js";
 import mediaRoutes from "./mediaRoutes.js";
 
 const router = express.Router();
@@ -32,6 +33,7 @@ router.use("/chat", chatRoutes);
 router.use("/tutor", tutorRoutes);
 router.use("/student", studentRoutes);
 router.use("/partner", partnerRoutes);
+router.use("/affiliate", affiliateRoutes);
 
 // Phase 2+ routes will be added here:
 // router.use("/courses", courseRoutes);

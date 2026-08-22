@@ -28,6 +28,11 @@ import {
   incrementReferralUsage,
 } from "../utils/referralCode.js";
 import { notifyEnrollmentSuccess } from "../utils/enrollmentEmail.js";
+import {
+  resolveAffiliateCode,
+  affiliateMetaFromResolution,
+} from "../utils/affiliateAttribution.js";
+import { fulfillAffiliateOnEnrollment } from "../utils/paymentFulfillment.js";
 
 const grantCourseAccess = async (studentId, courseId) => {
   await User.findByIdAndUpdate(studentId, {
@@ -194,6 +199,22 @@ const referralSuccessPayload = (pricing, referralMeta) => ({
   referralCode: referralMeta.referralCode || "",
 });
 
+const resolveAffiliateForOrder = async (affiliateCodeInput) => {
+  const resolution = await resolveAffiliateCode(affiliateCodeInput);
+  if (!resolution.ok) return resolution;
+  return {
+    ok: true,
+    affiliateMeta: affiliateMetaFromResolution(resolution),
+  };
+};
+
+const mergeAffiliateIntoPurchase = (payload, affiliateMeta = {}) => ({
+  ...payload,
+  affiliateCode: affiliateMeta.affiliateCode || "",
+  affiliateRef: affiliateMeta.affiliateRef || null,
+  affiliateCommissionRecorded: false,
+});
+
 export const validateCourseReferralCode = async (req, res) => {
   try {
     const course = await Course.findById(req.params.courseId);
@@ -311,28 +332,37 @@ export const createCourseOrder = async (req, res) => {
     if (!referralResult.ok) {
       return res.status(400).json({ success: false, message: referralResult.message });
     }
+    const affiliateResult = await resolveAffiliateForOrder(req.body?.affiliateCode);
+    if (!affiliateResult.ok) {
+      return res.status(400).json({ success: false, message: affiliateResult.message });
+    }
     const { pricing, referralMeta } = referralResult;
+    const { affiliateMeta } = affiliateResult;
 
     if (isFreePrice({ price: pricing.finalAmount })) {
-      await CoursePurchase.findOneAndUpdate(
+      const purchase = await CoursePurchase.findOneAndUpdate(
         { student: req.user._id, course: course._id },
-        {
-          student: req.user._id,
-          course: course._id,
-          amount: 0,
-          originalAmount: pricing.originalAmount,
-          discountAmount: pricing.discountAmount,
-          referralCode: referralMeta.referralCode || "",
-          referralCodeRef: referralMeta.referralCodeId || null,
-          status: "paid",
-          paymentGateway: referralMeta.referralCode ? "referral" : "free",
-        },
+        mergeAffiliateIntoPurchase(
+          {
+            student: req.user._id,
+            course: course._id,
+            amount: 0,
+            originalAmount: pricing.originalAmount,
+            discountAmount: pricing.discountAmount,
+            referralCode: referralMeta.referralCode || "",
+            referralCodeRef: referralMeta.referralCodeId || null,
+            status: "paid",
+            paymentGateway: referralMeta.referralCode ? "referral" : "free",
+          },
+          affiliateMeta
+        ),
         { upsert: true, new: true }
       );
       if (referralMeta.referralCodeId) {
         await incrementReferralUsage(referralMeta.referralCodeId);
       }
       await completeEnrollment(req.user._id, "course", course._id, pricing.finalAmount);
+      await fulfillAffiliateOnEnrollment(purchase, "course");
       return res.json({
         success: true,
         data: {
@@ -349,6 +379,7 @@ export const createCourseOrder = async (req, res) => {
     await upsertPendingCoursePurchase(req.user._id, course, session.sessionId, {
       ...pricing,
       ...referralMeta,
+      ...affiliateMeta,
     });
 
     res.json({
@@ -421,28 +452,37 @@ export const createWorkshopOrder = async (req, res) => {
     if (!referralResult.ok) {
       return res.status(400).json({ success: false, message: referralResult.message });
     }
+    const affiliateResult = await resolveAffiliateForOrder(req.body?.affiliateCode);
+    if (!affiliateResult.ok) {
+      return res.status(400).json({ success: false, message: affiliateResult.message });
+    }
     const { pricing, referralMeta } = referralResult;
+    const { affiliateMeta } = affiliateResult;
 
     if (isFreePrice({ price: pricing.finalAmount })) {
-      await WorkshopPurchase.findOneAndUpdate(
+      const purchase = await WorkshopPurchase.findOneAndUpdate(
         { student: req.user._id, workshop: workshop._id },
-        {
-          student: req.user._id,
-          workshop: workshop._id,
-          amount: 0,
-          originalAmount: pricing.originalAmount,
-          discountAmount: pricing.discountAmount,
-          referralCode: referralMeta.referralCode || "",
-          referralCodeRef: referralMeta.referralCodeId || null,
-          status: "paid",
-          paymentGateway: referralMeta.referralCode ? "referral" : "free",
-        },
+        mergeAffiliateIntoPurchase(
+          {
+            student: req.user._id,
+            workshop: workshop._id,
+            amount: 0,
+            originalAmount: pricing.originalAmount,
+            discountAmount: pricing.discountAmount,
+            referralCode: referralMeta.referralCode || "",
+            referralCodeRef: referralMeta.referralCodeId || null,
+            status: "paid",
+            paymentGateway: referralMeta.referralCode ? "referral" : "free",
+          },
+          affiliateMeta
+        ),
         { upsert: true, new: true }
       );
       if (referralMeta.referralCodeId) {
         await incrementReferralUsage(referralMeta.referralCodeId);
       }
       await completeEnrollment(req.user._id, "workshop", workshop._id, pricing.finalAmount);
+      await fulfillAffiliateOnEnrollment(purchase, "workshop");
       return res.json({
         success: true,
         data: {
@@ -459,6 +499,7 @@ export const createWorkshopOrder = async (req, res) => {
     await upsertPendingWorkshopPurchase(req.user._id, workshop, session.sessionId, {
       ...pricing,
       ...referralMeta,
+      ...affiliateMeta,
     });
 
     res.json({
